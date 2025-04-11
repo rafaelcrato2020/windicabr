@@ -1,6 +1,9 @@
-import { createServerClient } from "@/utils/supabase/server"
 import { NextResponse } from "next/server"
+import { createClient } from "@supabase/supabase-js"
 import { initCoinPayments } from "@/utils/coinpayments"
+
+// Criar cliente Supabase diretamente para rotas de API
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 export async function POST(request: Request) {
   try {
@@ -35,8 +38,6 @@ export async function POST(request: Request) {
     if (!depositId || !userId) {
       return NextResponse.json({ success: false, error: "Informações personalizadas ausentes" }, { status: 400 })
     }
-
-    const supabase = createServerClient()
 
     // Verificar o status do pagamento
     // 100 = confirmado
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
       }
 
       // Processar comissões de afiliados
-      await processReferralCommission(supabase, userId, amount)
+      await processReferralCommission(userId, amount, `Depósito de ${amount.toFixed(2)}`, supabase)
 
       return NextResponse.json({
         success: true,
@@ -138,7 +139,7 @@ export async function POST(request: Request) {
 }
 
 // Função para processar comissões de afiliados
-async function processReferralCommission(supabase: any, userId: string, depositAmount: number) {
+async function processReferralCommission(userId: string, depositAmount: number, description: string, supabase: any) {
   try {
     // Verificar se o usuário foi indicado por alguém
     const { data: userData, error: userError } = await supabase
@@ -186,7 +187,7 @@ async function processReferralCommission(supabase: any, userId: string, depositA
       user_id: referrerId,
       amount: level1Commission,
       type: "referral_commission",
-      description: `Comissão de indicação (10%) - Depósito de R$ ${depositAmount.toFixed(2)}`,
+      description: `Comissão de indicação (10%) - ${description}`,
       status: "completed",
     })
 
@@ -219,7 +220,7 @@ async function processReferralCommission(supabase: any, userId: string, depositA
           user_id: level2ReferrerId,
           amount: level2Commission,
           type: "referral_commission",
-          description: `Comissão de indicação nível 2 (5%) - Depósito de R$ ${depositAmount.toFixed(2)}`,
+          description: `Comissão de indicação nível 2 (5%) - ${description}`,
           status: "completed",
         })
       }
@@ -253,7 +254,7 @@ async function processReferralCommission(supabase: any, userId: string, depositA
             user_id: level3ReferrerId,
             amount: level3Commission,
             type: "referral_commission",
-            description: `Comissão de indicação nível 3 (3%) - Depósito de R$ ${depositAmount.toFixed(2)}`,
+            description: `Comissão de indicação nível 3 (3%) - ${description}`,
             status: "completed",
           })
         }
@@ -294,7 +295,7 @@ async function processReferralCommission(supabase: any, userId: string, depositA
               user_id: level4ReferrerId,
               amount: level4Commission,
               type: "referral_commission",
-              description: `Comissão de indicação nível 4 (2%) - Depósito de R$ ${depositAmount.toFixed(2)}`,
+              description: `Comissão de indicação nível 4 (2%) - ${description}`,
               status: "completed",
             })
           }

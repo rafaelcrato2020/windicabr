@@ -1,17 +1,17 @@
-import { createBrowserClient } from "@/utils/supabase/client"
-import { createServerClient } from "@/utils/supabase/server"
+import { createClient } from "@supabase/supabase-js"
 
-// Função que pode ser usada tanto no cliente quanto no servidor
+// Função para processar comissões de indicação
 export async function processReferralCommission(
   userId: string,
   amount: number,
   description: string,
   supabaseClient?: any,
 ) {
-  try {
-    // Usar o cliente fornecido ou criar um novo
-    const supabase = supabaseClient || createBrowserClient()
+  // Se não for fornecido um cliente Supabase, criar um novo
+  const supabase =
+    supabaseClient || createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
+  try {
     // Verificar se o usuário foi indicado por alguém
     const { data: userData, error: userError } = await supabase
       .from("profiles")
@@ -95,15 +95,18 @@ export async function processReferralCommission(
           status: "completed",
         })
       }
+    }
 
-      // Processar nível 3 (3%)
+    // Processar níveis 3 e 4 de forma similar...
+    // Nível 3 (3%)
+    if (!level2Error && level2Data.referred_by) {
       const { data: level3Data, error: level3Error } = await supabase
         .from("profiles")
         .select("referred_by")
-        .eq("id", level2ReferrerId)
+        .eq("id", level2Data.referred_by)
         .single()
 
-      if (!level3Error && level3Data && level3Data.referred_by) {
+      if (!level3Error && level3Data.referred_by) {
         const level3ReferrerId = level3Data.referred_by
         const level3Commission = amount * 0.03
 
@@ -126,12 +129,22 @@ export async function processReferralCommission(
             status: "completed",
           })
         }
+      }
+    }
 
-        // Processar nível 4 (2%)
+    // Nível 4 (2%)
+    if (!level2Error && level2Data.referred_by) {
+      const { data: level3Data, error: level3Error } = await supabase
+        .from("profiles")
+        .select("referred_by")
+        .eq("id", level2Data.referred_by)
+        .single()
+
+      if (!level3Error && level3Data && level3Data.referred_by) {
         const { data: level4Data, error: level4Error } = await supabase
           .from("profiles")
           .select("referred_by")
-          .eq("id", level3ReferrerId)
+          .eq("id", level3Data.referred_by)
           .single()
 
         if (!level4Error && level4Data && level4Data.referred_by) {
@@ -167,10 +180,4 @@ export async function processReferralCommission(
     console.error("Erro ao processar comissões de indicação:", error)
     return false
   }
-}
-
-// Versão para uso no servidor
-export async function processReferralCommissionServer(userId: string, amount: number, description: string) {
-  const supabase = createServerClient()
-  return processReferralCommission(userId, amount, description, supabase)
 }

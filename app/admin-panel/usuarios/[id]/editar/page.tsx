@@ -109,7 +109,7 @@ export default function EditUserPage({ params }: { params: { id: string } }) {
         await processReferralCommission(
           params.id,
           balanceDifference,
-          `Ajuste de saldo de $${balanceDifference.toFixed(2)}`,
+          `Ajuste de saldo de ${balanceDifference.toFixed(2)}`,
           supabase,
         )
       }

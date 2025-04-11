@@ -1,10 +1,12 @@
-import { createServerClient } from "@/utils/supabase/server"
 import { NextResponse } from "next/server"
+import { createClient } from "@supabase/supabase-js"
 import { initCoinPayments } from "@/utils/coinpayments"
+
+// Criar cliente Supabase diretamente para rotas de API
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 export async function POST(request: Request) {
   try {
-    const supabase = createServerClient()
     const { amount, depositId } = await request.json()
 
     if (!amount || !depositId) {

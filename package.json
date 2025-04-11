@@ -61,7 +61,8 @@
     "@supabase/supabase-js": "latest",
     "@supabase/auth-helpers-nextjs": "latest",
     "axios": "latest",
-    "crypto": "latest"
+    "crypto": "latest",
+    "@supabase/ssr": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

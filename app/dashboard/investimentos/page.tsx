@@ -19,11 +19,9 @@ import {
 } from "@/components/ui/dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useMobile } from "@/hooks/use-mobile"
-
-// Vamos modificar a parte que exibe o saldo disponível para buscar os dados atualizados do banco de dados
-
-// Adicione estas importações no topo do arquivo, após as importações existentes
 import { createBrowserClient } from "@/utils/supabase/client"
+import { useToast } from "@/hooks/use-toast"
+import { processReferralCommission } from "@/utils/process-referral-commission"
 
 // Modifique a função formatCurrency para garantir o formato brasileiro
 function formatCurrency(value: number): string {
@@ -52,7 +50,14 @@ export default function InvestimentosPage() {
   const [showCalculator, setShowCalculator] = useState(false)
   const [userBalance, setUserBalance] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [processing, setProcessing] = useState(false)
+  const [showConfirmation, setShowConfirmation] = useState(false)
+  const [totalInvested, setTotalInvested] = useState(0)
+  const [activeInvestments, setActiveInvestments] = useState<any[]>([])
+  const [dailyReturn, setDailyReturn] = useState(0)
+  const [totalReturn, setTotalReturn] = useState(0)
   const supabase = createBrowserClient()
+  const { toast } = useToast()
 
   const [calculatorAmount, setCalculatorAmount] = useState(1000)
   const [calculatorAmountFormatted, setCalculatorAmountFormatted] = useState("")
@@ -63,9 +68,9 @@ export default function InvestimentosPage() {
   const walletAddress = "0xda217f2fe75F93AD36bA361193a8540a731ddAb6"
   const isMobile = useMobile()
 
-  // Adicione este useEffect para buscar o saldo do usuário
+  // Adicione este useEffect para buscar o saldo do usuário e investimentos
   useEffect(() => {
-    async function fetchUserBalance() {
+    async function fetchUserData() {
       try {
         setLoading(true)
 
@@ -88,14 +93,48 @@ export default function InvestimentosPage() {
         } else if (data) {
           setUserBalance(data.balance || 0)
         }
+
+        // Buscar investimentos ativos
+        const { data: investments, error: investmentsError } = await supabase
+          .from("investments")
+          .select("*")
+          .eq("user_id", session.user.id)
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+
+        if (investmentsError) {
+          console.error("Erro ao buscar investimentos:", investmentsError)
+        } else {
+          setActiveInvestments(investments || [])
+
+          // Calcular total investido e rendimento diário
+          let total = 0
+          let dailyReturnTotal = 0
+          let totalReturnAccumulated = 0
+
+          investments?.forEach((inv) => {
+            total += inv.amount
+            dailyReturnTotal += inv.amount * (inv.rate / 100)
+
+            // Calcular rendimento acumulado (dias desde a criação * taxa diária * valor)
+            const createdAt = new Date(inv.created_at)
+            const now = new Date()
+            const daysDiff = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24))
+            totalReturnAccumulated += inv.amount * (inv.rate / 100) * daysDiff
+          })
+
+          setTotalInvested(total)
+          setDailyReturn(dailyReturnTotal)
+          setTotalReturn(totalReturnAccumulated)
+        }
       } catch (err) {
-        console.error("Erro ao buscar saldo:", err)
+        console.error("Erro ao buscar dados:", err)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchUserBalance()
+    fetchUserData()
   }, [supabase])
 
   // Inicializa os valores formatados
@@ -230,6 +269,125 @@ export default function InvestimentosPage() {
     return returns
   }
 
+  // Função para processar o investimento
+  const handleInvestment = async () => {
+    try {
+      setProcessing(true)
+
+      // Verificar se o valor é válido
+      if (investmentAmount < 1) {
+        toast({
+          title: "Erro",
+          description: "O valor mínimo de investimento é $1 USDT",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Verificar se o usuário tem saldo suficiente
+      if (userBalance < investmentAmount) {
+        toast({
+          title: "Erro",
+          description: "Saldo insuficiente para realizar este investimento",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Obter a sessão atual
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
+        toast({
+          title: "Erro",
+          description: "Usuário não autenticado",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Determinar a taxa de rendimento (entre 4% e 10%)
+      // Para este exemplo, vamos usar uma taxa aleatória entre 4 e 10
+      const rate = Math.floor(Math.random() * (10 - 4 + 1)) + 4
+
+      // 1. Criar o registro de investimento
+      const { data: investment, error: investmentError } = await supabase
+        .from("investments")
+        .insert({
+          user_id: session.user.id,
+          amount: investmentAmount,
+          rate: rate,
+          status: "active",
+        })
+        .select()
+        .single()
+
+      if (investmentError) {
+        throw new Error(`Erro ao criar investimento: ${investmentError.message}`)
+      }
+
+      // 2. Atualizar o saldo do usuário
+      const newBalance = userBalance - investmentAmount
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ balance: newBalance })
+        .eq("id", session.user.id)
+
+      if (updateError) {
+        throw new Error(`Erro ao atualizar saldo: ${updateError.message}`)
+      }
+
+      // 3. Registrar a transação
+      const { error: transactionError } = await supabase.from("transactions").insert({
+        user_id: session.user.id,
+        amount: investmentAmount,
+        type: "investment",
+        description: `Investimento de ${formatCurrency(investmentAmount)} com rendimento de ${rate}% ao dia`,
+        status: "completed",
+      })
+
+      if (transactionError) {
+        console.error("Erro ao registrar transação:", transactionError)
+      }
+
+      // 4. Processar comissões de indicação
+      await processReferralCommission(
+        session.user.id,
+        investmentAmount,
+        `Investimento de ${formatCurrency(investmentAmount)}`,
+        supabase,
+      )
+
+      // Atualizar os estados
+      setUserBalance(newBalance)
+      setTotalInvested(totalInvested + investmentAmount)
+      setDailyReturn(dailyReturn + investmentAmount * (rate / 100))
+      setActiveInvestments([investment, ...activeInvestments])
+
+      // Mostrar mensagem de sucesso
+      toast({
+        title: "Sucesso",
+        description: `Investimento de ${formatCurrency(investmentAmount)} realizado com sucesso!`,
+      })
+
+      // Fechar o modal e resetar o valor
+      setShowConfirmation(false)
+      setInvestmentAmount(0)
+      setInvestmentAmountFormatted("0,00")
+    } catch (error: any) {
+      console.error("Erro ao processar investimento:", error)
+      toast({
+        title: "Erro",
+        description: error.message || "Não foi possível processar o investimento",
+        variant: "destructive",
+      })
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   const returns = calculateReturns()
   // Garantir que finalReturn sempre exista, mesmo se returns estiver vazio
   const finalReturn =
@@ -292,8 +450,8 @@ export default function InvestimentosPage() {
                           variant="outline"
                           className="border-green-900/50 text-green-500 hover:bg-green-900/20"
                           onClick={() => {
-                            setInvestmentAmount(2540)
-                            setInvestmentAmountFormatted(formatNumber(2540))
+                            setInvestmentAmount(userBalance)
+                            setInvestmentAmountFormatted(formatNumber(userBalance))
                           }}
                         >
                           Máx
@@ -347,10 +505,22 @@ export default function InvestimentosPage() {
                         className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-medium"
                         onClick={() => {
                           if (investmentAmount < 1) {
-                            alert("O valor mínimo de investimento é $1 USDT")
+                            toast({
+                              title: "Erro",
+                              description: "O valor mínimo de investimento é $1 USDT",
+                              variant: "destructive",
+                            })
                             return
                           }
-                          setShowQRCode(true)
+                          if (userBalance < investmentAmount) {
+                            toast({
+                              title: "Erro",
+                              description: "Saldo insuficiente para realizar este investimento",
+                              variant: "destructive",
+                            })
+                            return
+                          }
+                          setShowConfirmation(true)
                         }}
                       >
                         Confirmar Investimento
@@ -444,22 +614,41 @@ export default function InvestimentosPage() {
                 <div className="space-y-4 md:space-y-6">
                   <div className="space-y-2">
                     <p className="text-sm text-gray-400">Total Investido</p>
-                    <p className="text-2xl font-bold text-yellow-500">{formatCurrency(0)}</p>
+                    <p className="text-2xl font-bold text-yellow-500">{formatCurrency(totalInvested)}</p>
                   </div>
 
                   <div className="space-y-2">
                     <p className="text-sm text-gray-400">Rendimento Acumulado</p>
-                    <p className="text-2xl font-bold text-green-500">{formatCurrency(0)}</p>
+                    <p className="text-2xl font-bold text-green-500">{formatCurrency(totalReturn)}</p>
                   </div>
 
                   <div className="space-y-2">
                     <p className="text-sm text-gray-400">Rendimento Diário Atual</p>
-                    <p className="text-2xl font-bold text-green-500">{formatCurrency(0)}</p>
+                    <p className="text-2xl font-bold text-green-500">{formatCurrency(dailyReturn)}</p>
                   </div>
 
                   <div className="border-t border-green-900/30 pt-4 mt-4">
                     <p className="text-sm font-medium mb-2">Investimentos Ativos</p>
-                    <div className="text-center py-4 text-gray-400">Nenhum investimento ativo no momento.</div>
+                    {activeInvestments.length > 0 ? (
+                      <div className="space-y-3">
+                        {activeInvestments.map((inv, index) => (
+                          <div key={index} className="bg-black/30 rounded-lg p-3 border border-green-900/30">
+                            <div className="flex justify-between items-center mb-1">
+                              <p className="font-medium">{formatCurrency(inv.amount)}</p>
+                              <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded-full">
+                                {inv.rate}% ao dia
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs text-gray-400">
+                              <span>Rendimento: {formatCurrency(inv.amount * (inv.rate / 100))} / dia</span>
+                              <span>{new Date(inv.created_at).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-gray-400">Nenhum investimento ativo no momento.</div>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -521,6 +710,73 @@ export default function InvestimentosPage() {
             </Button>
             <Button className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-medium w-full sm:w-auto">
               Já Realizei o Pagamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de confirmação de investimento */}
+      <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
+        <DialogContent className="bg-black/90 border-green-900/50 max-w-md p-4 md:p-6">
+          <DialogHeader>
+            <DialogTitle>Confirmar Investimento</DialogTitle>
+            <DialogDescription>
+              Você está prestes a investir {formatCurrency(investmentAmount)} do seu saldo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Alert className="bg-green-500/10 border-green-900/50 text-green-500">
+              <Info className="h-4 w-4" />
+              <AlertTitle>Informação</AlertTitle>
+              <AlertDescription>
+                Seu investimento começará a gerar rendimentos diários entre 4% e 10% imediatamente.
+              </AlertDescription>
+            </Alert>
+
+            <div className="bg-black/50 border border-green-900/50 rounded-lg p-4">
+              <p className="text-sm text-gray-400 mb-2">Detalhes do Investimento</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-xs text-gray-400">Valor</p>
+                  <p className="font-medium">{formatCurrency(investmentAmount)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Taxa Estimada</p>
+                  <p className="font-medium">4% - 10% ao dia</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Rendimento Mínimo</p>
+                  <p className="font-medium text-green-500">{formatCurrency(investmentAmount * 0.04)} / dia</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Rendimento Máximo</p>
+                  <p className="font-medium text-green-500">{formatCurrency(investmentAmount * 0.1)} / dia</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">
+            <Button
+              variant="outline"
+              className="border-green-900/50 text-green-500 hover:bg-green-900/20 w-full sm:w-auto"
+              onClick={() => setShowConfirmation(false)}
+              disabled={processing}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-medium w-full sm:w-auto"
+              onClick={handleInvestment}
+              disabled={processing}
+            >
+              {processing ? (
+                <>
+                  <span className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-black mr-2"></span>
+                  Processando...
+                </>
+              ) : (
+                "Confirmar Investimento"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

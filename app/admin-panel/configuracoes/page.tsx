@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(false)
@@ -14,7 +15,6 @@ export default function SettingsPage() {
   const router = useRouter()
 
   // Atualizar a função handleInitTables para redirecionar para a nova página
-
   const handleInitTables = () => {
     router.push("/admin-panel/configuracoes/init-database")
   }
@@ -48,10 +48,17 @@ export default function SettingsPage() {
             <button
               onClick={handleInitTables}
               disabled={loading}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white disabled:opacity-50"
+              className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white disabled:opacity-50 mb-4"
             >
               {loading ? "Inicializando..." : "Inicializar Tabelas"}
             </button>
+
+            <Link
+              href="/admin-panel/configuracoes/sync-users"
+              className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 rounded-md text-white text-center block"
+            >
+              Sincronizar Usuários
+            </Link>
           </div>
         </div>
 

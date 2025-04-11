@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Copy, LinkIcon, Share2, Check } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+
+// Vamos modificar a parte que exibe o saldo disponível para buscar os dados atualizados do banco de dados
+
+// Adicione estas importações no topo do arquivo, após as importações existentes
+import { createBrowserClient } from "@/utils/supabase/client"
 
 // Modifique a função formatCurrency para garantir o formato brasileiro
 function formatCurrency(value: number): string {
@@ -105,6 +110,44 @@ export default function AfiliadosPage() {
   const [activeTab, setActiveTab] = useState("overview")
   const [showCalculator, setShowCalculator] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [userBalance, setUserBalance] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const supabase = createBrowserClient()
+
+  // Adicione este useEffect para buscar o saldo do usuário
+  useEffect(() => {
+    async function fetchUserBalance() {
+      try {
+        setLoading(true)
+
+        // Obter a sessão atual
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session) {
+          console.error("Usuário não autenticado")
+          setLoading(false)
+          return
+        }
+
+        // Buscar o perfil do usuário com o saldo
+        const { data, error } = await supabase.from("profiles").select("balance").eq("id", session.user.id).single()
+
+        if (error) {
+          console.error("Erro ao buscar saldo:", error)
+        } else if (data) {
+          setUserBalance(data.balance || 0)
+        }
+      } catch (err) {
+        console.error("Erro ao buscar saldo:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUserBalance()
+  }, [supabase])
 
   // Estados para a calculadora
   const [level1Count, setLevel1Count] = useState(0)

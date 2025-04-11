@@ -51,83 +51,88 @@ export default function RejectWithdrawal({ params }: { params: { id: string } })
 
     setProcessing(true)
 
-    // 1. Atualizar o status do saque
-    const { error: withdrawalError } = await supabase
-      .from("withdrawals")
-      .update({
-        status: "rejected",
-        notes: reason,
+    try {
+      // 1. Atualizar o status do saque
+      const { error: withdrawalError } = await supabase
+        .from("withdrawals")
+        .update({
+          status: "rejected",
+          notes: reason,
+        })
+        .eq("id", params.id)
+
+      if (withdrawalError) {
+        throw new Error("Não foi possível rejeitar o saque: " + withdrawalError.message)
+      }
+
+      // 2. Devolver o valor para o saldo do usuário
+      const { data: userData, error: userError } = await supabase
+        .from("profiles")
+        .select("balance")
+        .eq("id", withdrawal.user_id)
+        .single()
+
+      if (userError) {
+        throw new Error("Não foi possível obter o saldo do usuário: " + userError.message)
+      }
+
+      const newBalance = (userData.balance || 0) + withdrawal.amount
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ balance: newBalance })
+        .eq("id", withdrawal.user_id)
+
+      if (updateError) {
+        throw new Error("Não foi possível atualizar o saldo do usuário: " + updateError.message)
+      }
+
+      // 3. Atualizar a transação relacionada ou criar uma nova
+      const { data: transactionData, error: transactionFetchError } = await supabase
+        .from("transactions")
+        .select("id")
+        .eq("user_id", withdrawal.user_id)
+        .eq("type", "withdrawal")
+        .eq("amount", withdrawal.amount)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+
+      if (!transactionFetchError && transactionData && transactionData.length > 0) {
+        // Atualizar a transação para "rejected"
+        await supabase
+          .from("transactions")
+          .update({
+            status: "rejected",
+            description: `Saque rejeitado: ${reason}`,
+          })
+          .eq("id", transactionData[0].id)
+      }
+
+      // 4. Criar registro de transação para o estorno
+      await supabase.from("transactions").insert({
+        user_id: withdrawal.user_id,
+        amount: withdrawal.amount,
+        type: "withdrawal_rejected",
+        description: `Saque rejeitado: ${reason}`,
+        status: "completed",
       })
-      .eq("id", params.id)
 
-    if (withdrawalError) {
       toast({
-        title: "Erro",
-        description: "Não foi possível rejeitar o saque",
-        variant: "destructive",
-      })
-      setProcessing(false)
-      return
-    }
-
-    // 2. Devolver o valor para o saldo do usuário
-    const { data: userData, error: userError } = await supabase
-      .from("profiles")
-      .select("balance")
-      .eq("id", withdrawal.user_id)
-      .single()
-
-    if (userError) {
-      toast({
-        title: "Erro",
-        description: "Não foi possível obter o saldo do usuário",
-        variant: "destructive",
-      })
-      setProcessing(false)
-      return
-    }
-
-    const newBalance = (userData.balance || 0) + withdrawal.amount
-
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({ balance: newBalance })
-      .eq("id", withdrawal.user_id)
-
-    if (updateError) {
-      toast({
-        title: "Erro",
-        description: "Não foi possível atualizar o saldo do usuário",
-        variant: "destructive",
-      })
-      setProcessing(false)
-      return
-    }
-
-    // 3. Criar registro de transação
-    const { error: transactionError } = await supabase.from("transactions").insert({
-      user_id: withdrawal.user_id,
-      amount: withdrawal.amount,
-      type: "refund",
-      description: `Saque rejeitado: ${reason}`,
-      status: "completed",
-    })
-
-    if (transactionError) {
-      toast({
-        title: "Aviso",
-        description: "Saque rejeitado, mas houve um erro ao registrar a transação",
+        title: "Sucesso",
+        description: "Saque rejeitado com sucesso e valor devolvido ao usuário",
         variant: "default",
       })
+
+      router.push("/admin-panel/saques")
+    } catch (error: any) {
+      console.error("Erro ao rejeitar saque:", error)
+      toast({
+        title: "Erro",
+        description: error.message || "Não foi possível rejeitar o saque",
+        variant: "destructive",
+      })
+      setProcessing(false)
     }
-
-    toast({
-      title: "Sucesso",
-      description: "Saque rejeitado com sucesso",
-      variant: "default",
-    })
-
-    router.push("/admin-panel/saques")
   }
 
   if (loading) {
@@ -175,35 +180,23 @@ export default function RejectWithdrawal({ params }: { params: { id: string } })
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <p className="text-gray-400 text-sm">Usuário</p>
-            <p className="font-medium">{withdrawal.profiles?.name}</p>
+            <p className="font-medium">{withdrawal.profiles?.name || "Usuário"}</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm">Email</p>
-            <p className="font-medium">{withdrawal.profiles?.email}</p>
+            <p className="font-medium">{withdrawal.profiles?.email || "Não disponível"}</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm">Valor</p>
             <p className="font-medium text-red-400">R$ {withdrawal.amount.toFixed(2)}</p>
           </div>
           <div>
-            <p className="text-gray-400 text-sm">Método</p>
-            <p className="font-medium">{withdrawal.payment_method || "Pix"}</p>
-          </div>
-          <div>
             <p className="text-gray-400 text-sm">Data</p>
             <p className="font-medium">{new Date(withdrawal.created_at).toLocaleDateString("pt-BR")}</p>
           </div>
-          <div>
-            <p className="text-gray-400 text-sm">Status</p>
-            <p className="font-medium">
-              <span className="px-2 py-1 rounded-full text-xs bg-yellow-500/20 text-yellow-400">Pendente</span>
-            </p>
-          </div>
           <div className="col-span-2">
             <p className="text-gray-400 text-sm">Carteira USDT (TRC20)</p>
-            <div className="bg-gray-700 p-3 rounded-lg break-all text-yellow-400 font-mono text-sm mt-1">
-              {withdrawal.pix_key || withdrawal.wallet}
-            </div>
+            <p className="font-medium font-mono break-all">{withdrawal.pix_key || "Não informado"}</p>
           </div>
         </div>
 
@@ -220,7 +213,7 @@ export default function RejectWithdrawal({ params }: { params: { id: string } })
           <div className="flex space-x-4">
             <button
               onClick={handleReject}
-              disabled={processing}
+              disabled={processing || !reason.trim()}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {processing ? (

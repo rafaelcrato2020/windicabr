@@ -20,6 +20,11 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useMobile } from "@/hooks/use-mobile"
 
+// Vamos modificar a parte que exibe o saldo disponível para buscar os dados atualizados do banco de dados
+
+// Adicione estas importações no topo do arquivo, após as importações existentes
+import { createBrowserClient } from "@/utils/supabase/client"
+
 // Modifique a função formatCurrency para garantir o formato brasileiro
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -45,6 +50,9 @@ export default function InvestimentosPage() {
   const [showQRCode, setShowQRCode] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showCalculator, setShowCalculator] = useState(false)
+  const [userBalance, setUserBalance] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const supabase = createBrowserClient()
 
   const [calculatorAmount, setCalculatorAmount] = useState(1000)
   const [calculatorAmountFormatted, setCalculatorAmountFormatted] = useState("")
@@ -54,6 +62,41 @@ export default function InvestimentosPage() {
 
   const walletAddress = "0xda217f2fe75F93AD36bA361193a8540a731ddAb6"
   const isMobile = useMobile()
+
+  // Adicione este useEffect para buscar o saldo do usuário
+  useEffect(() => {
+    async function fetchUserBalance() {
+      try {
+        setLoading(true)
+
+        // Obter a sessão atual
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session) {
+          console.error("Usuário não autenticado")
+          setLoading(false)
+          return
+        }
+
+        // Buscar o perfil do usuário com o saldo
+        const { data, error } = await supabase.from("profiles").select("balance").eq("id", session.user.id).single()
+
+        if (error) {
+          console.error("Erro ao buscar saldo:", error)
+        } else if (data) {
+          setUserBalance(data.balance || 0)
+        }
+      } catch (err) {
+        console.error("Erro ao buscar saldo:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUserBalance()
+  }, [supabase])
 
   // Inicializa os valores formatados
   useEffect(() => {
@@ -199,6 +242,7 @@ export default function InvestimentosPage() {
           percentReturn: 0,
         }
 
+  // Modifique a parte que exibe o saldo disponível
   return (
     <div className="flex flex-col min-h-screen">
       <header className="sticky top-0 z-40 border-b border-green-900/30 bg-black/80 backdrop-blur-xl md:flex hidden h-16 items-center">
@@ -231,7 +275,7 @@ export default function InvestimentosPage() {
                         <label htmlFor="amount" className="text-sm font-medium">
                           Valor do Investimento (USDT)
                         </label>
-                        <span className="text-sm text-gray-400">Saldo disponível: {formatCurrency(0)}</span>
+                        <span className="text-sm text-gray-400">Saldo disponível: {formatCurrency(userBalance)}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="relative flex-1">

@@ -81,7 +81,9 @@ export async function GET() {
           balance DECIMAL(15, 2) DEFAULT 0,
           investments DECIMAL(15, 2) DEFAULT 0,
           referral_code TEXT,
-          referred_by TEXT
+          referred_by TEXT,
+          last_yield_date TIMESTAMP WITH TIME ZONE,
+          last_yield_rate DECIMAL(5, 2)
         )
       `)
       console.log("Tabela profiles verificada/criada com sucesso")
@@ -113,6 +115,21 @@ export async function GET() {
         )
       `)
       console.log("Tabela yields verificada/criada com sucesso")
+
+      // Criar tabela transactions
+      await executeSql(`
+        CREATE TABLE IF NOT EXISTS public.transactions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID REFERENCES auth.users(id),
+          amount DECIMAL(15, 2) NOT NULL,
+          type TEXT NOT NULL,
+          description TEXT,
+          status TEXT DEFAULT 'pending',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+      `)
+      console.log("Tabela transactions verificada/criada com sucesso")
 
       // Criar tabela settings
       await executeSql(`

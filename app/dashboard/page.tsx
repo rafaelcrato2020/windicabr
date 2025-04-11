@@ -1,12 +1,17 @@
 "use client"
 
-import { useState } from "react"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts"
 import { ArrowDown, ArrowUp, BarChart3, DollarSign, TrendingUp, Users, Wallet } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { useMobile } from "@/hooks/use-mobile"
+
+// Vamos modificar a parte que exibe o saldo disponível para buscar os dados atualizados do banco de dados
+
+// Adicione estas importações no topo do arquivo, após as importações existentes
+import { useEffect, useState } from "react"
+import { createBrowserClient } from "@/utils/supabase/client"
 
 // Função para formatar números com separadores
 function formatCurrency(value: number): string {
@@ -105,10 +110,52 @@ function BalanceCard({
   )
 }
 
+// Modifique o componente DashboardPage para buscar o saldo do usuário
 export default function DashboardPage() {
   const [period, setPeriod] = useState("week")
   const isMobile = useMobile()
+  const [userBalance, setUserBalance] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const supabase = createBrowserClient()
 
+  // Adicione este useEffect para buscar o saldo do usuário
+  useEffect(() => {
+    async function fetchUserBalance() {
+      try {
+        setLoading(true)
+
+        // Obter a sessão atual
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session) {
+          console.error("Usuário não autenticado")
+          setLoading(false)
+          return
+        }
+
+        // Buscar o perfil do usuário com o saldo
+        const { data, error } = await supabase.from("profiles").select("balance").eq("id", session.user.id).single()
+
+        if (error) {
+          console.error("Erro ao buscar saldo:", error)
+        } else if (data) {
+          setUserBalance(data.balance || 0)
+        }
+      } catch (err) {
+        console.error("Erro ao buscar saldo:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUserBalance()
+  }, [supabase])
+
+  // Resto do código permanece o mesmo...
+
+  // Modifique o BalanceCard para o saldo disponível para usar o valor buscado do banco
   return (
     <div className="flex flex-col min-h-screen">
       <header className="sticky top-0 z-40 border-b border-green-900/30 bg-black/80 backdrop-blur-xl md:flex hidden">
@@ -129,7 +176,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <BalanceCard
                 title="Saldo Disponível"
-                value={formatCurrency(0)}
+                value={formatCurrency(userBalance)}
                 icon={Wallet}
                 trend="neutral"
                 trendValue="0%"

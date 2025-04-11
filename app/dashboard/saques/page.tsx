@@ -14,6 +14,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
+// Vamos modificar a parte que exibe o saldo disponível para buscar os dados atualizados do banco de dados
+
+// Adicione estas importações no topo do arquivo, após as importações existentes
+import { createBrowserClient } from "@/utils/supabase/client"
+import { useToast } from "@/hooks/use-toast"
+
 // Função para formatar números com separadores
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -40,6 +46,60 @@ export default function SaquesPage() {
   const [showConfirmation, setShowConfirmation] = useState(false)
   const [activeTab, setActiveTab] = useState("withdraw")
   const [showMinimumAlert, setShowMinimumAlert] = useState(false)
+  const [userBalance, setUserBalance] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [withdrawals, setWithdrawals] = useState<any[]>([])
+  const supabase = createBrowserClient()
+  const { toast } = useToast()
+
+  // Adicione este useEffect para buscar o saldo do usuário e histórico de saques
+  useEffect(() => {
+    async function fetchUserData() {
+      try {
+        setLoading(true)
+
+        // Obter a sessão atual
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session) {
+          console.error("Usuário não autenticado")
+          setLoading(false)
+          return
+        }
+
+        // Buscar o perfil do usuário com o saldo
+        const { data, error } = await supabase.from("profiles").select("balance").eq("id", session.user.id).single()
+
+        if (error) {
+          console.error("Erro ao buscar saldo:", error)
+        } else if (data) {
+          setUserBalance(data.balance || 0)
+        }
+
+        // Buscar histórico de saques
+        const { data: withdrawalsData, error: withdrawalsError } = await supabase
+          .from("withdrawals")
+          .select("*")
+          .eq("user_id", session.user.id)
+          .order("created_at", { ascending: false })
+
+        if (!withdrawalsError && withdrawalsData) {
+          setWithdrawals(withdrawalsData)
+        } else if (withdrawalsError) {
+          console.error("Erro ao buscar histórico de saques:", withdrawalsError)
+        }
+      } catch (err) {
+        console.error("Erro ao buscar dados do usuário:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUserData()
+  }, [supabase])
 
   // Inicializa o valor formatado
   useEffect(() => {
@@ -49,6 +109,15 @@ export default function SaquesPage() {
   const handleWithdraw = () => {
     if (withdrawAmount < 2.2) {
       setShowMinimumAlert(true)
+      return
+    }
+
+    if (withdrawAmount > userBalance) {
+      toast({
+        title: "Erro",
+        description: "Saldo insuficiente para realizar este saque",
+        variant: "destructive",
+      })
       return
     }
 
@@ -90,6 +159,129 @@ export default function SaquesPage() {
     }
   }
 
+  // Função para confirmar o saque
+  const confirmWithdrawal = async () => {
+    if (withdrawAmount < 2.2 || !walletAddress) {
+      return
+    }
+
+    setSubmitting(true)
+
+    try {
+      // Obter a sessão atual
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
+        throw new Error("Usuário não autenticado")
+      }
+
+      // Verificar saldo novamente
+      const { data: userData, error: userError } = await supabase
+        .from("profiles")
+        .select("balance")
+        .eq("id", session.user.id)
+        .single()
+
+      if (userError) {
+        throw new Error("Erro ao verificar saldo")
+      }
+
+      const currentBalance = userData.balance || 0
+
+      if (withdrawAmount > currentBalance) {
+        throw new Error("Saldo insuficiente para realizar este saque")
+      }
+
+      // 1. Criar registro de saque
+      const { data: withdrawal, error: withdrawalError } = await supabase
+        .from("withdrawals")
+        .insert({
+          user_id: session.user.id,
+          amount: withdrawAmount,
+          pix_key: walletAddress,
+          status: "pending",
+        })
+        .select()
+
+      if (withdrawalError) {
+        throw new Error("Erro ao registrar solicitação de saque")
+      }
+
+      // 2. Atualizar saldo do usuário
+      const newBalance = currentBalance - withdrawAmount
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ balance: newBalance })
+        .eq("id", session.user.id)
+
+      if (updateError) {
+        throw new Error("Erro ao atualizar saldo")
+      }
+
+      // 3. Criar registro de transação
+      await supabase.from("transactions").insert({
+        user_id: session.user.id,
+        amount: withdrawAmount,
+        type: "withdrawal",
+        description: "Solicitação de saque",
+        status: "pending",
+      })
+
+      // Atualizar saldo local
+      setUserBalance(newBalance)
+
+      // Atualizar lista de saques
+      const { data: updatedWithdrawals } = await supabase
+        .from("withdrawals")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: false })
+
+      if (updatedWithdrawals) {
+        setWithdrawals(updatedWithdrawals)
+      }
+
+      // Mostrar mensagem de sucesso
+      toast({
+        title: "Solicitação enviada",
+        description: "Seu saque foi solicitado com sucesso e será processado em até 24 horas.",
+        variant: "success",
+      })
+
+      // Limpar formulário
+      setWithdrawAmount(0)
+      setWithdrawAmountFormatted("0,00")
+      setWalletAddress("")
+      setShowConfirmation(false)
+      setActiveTab("history")
+    } catch (error: any) {
+      console.error("Erro ao processar saque:", error)
+      toast({
+        title: "Erro",
+        description: error.message || "Ocorreu um erro ao processar seu saque",
+        variant: "destructive",
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Função para formatar status do saque
+  const formatStatus = (status: string) => {
+    switch (status) {
+      case "approved":
+        return { text: "Aprovado", class: "bg-green-500/20 text-green-500" }
+      case "rejected":
+        return { text: "Rejeitado", class: "bg-red-500/20 text-red-500" }
+      case "pending":
+      default:
+        return { text: "Pendente", class: "bg-yellow-500/20 text-yellow-500" }
+    }
+  }
+
+  // Modifique a parte que exibe o saldo disponível
   return (
     <div className="flex flex-col min-h-screen">
       <header className="sticky top-0 z-40 border-b border-green-900/30 bg-black/80 backdrop-blur-xl">
@@ -127,7 +319,7 @@ export default function SaquesPage() {
                           <Label htmlFor="amount" className="text-sm font-medium">
                             Valor do Saque (USDT)
                           </Label>
-                          <span className="text-sm text-gray-400">Saldo disponível: {formatCurrency(0)}</span>
+                          <span className="text-sm text-gray-400">Saldo disponível: {formatCurrency(userBalance)}</span>
                         </div>
                         {/* Campo de entrada com formatação */}
                         <div className="flex items-center gap-2">
@@ -145,8 +337,8 @@ export default function SaquesPage() {
                             variant="outline"
                             className="border-green-900/50 text-green-500 hover:bg-green-900/20"
                             onClick={() => {
-                              setWithdrawAmount(2540)
-                              setWithdrawAmountFormatted(formatNumber(2540))
+                              setWithdrawAmount(userBalance)
+                              setWithdrawAmountFormatted(formatNumber(userBalance))
                               setShowMinimumAlert(false)
                             }}
                           >
@@ -190,15 +382,54 @@ export default function SaquesPage() {
                     </div>
                   </TabsContent>
                   <TabsContent value="history" className="space-y-6 mt-6">
-                    <div className="flex flex-col items-center justify-center py-10 text-center">
-                      <div className="w-16 h-16 rounded-full bg-gray-800/50 flex items-center justify-center mb-4">
-                        <Info className="h-8 w-8 text-gray-400" />
+                    {loading ? (
+                      <div className="flex justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-red-500"></div>
                       </div>
-                      <h3 className="text-lg font-medium mb-2">Nenhum saque encontrado</h3>
-                      <p className="text-gray-400 max-w-md">
-                        Você ainda não realizou nenhum saque. Quando você solicitar um saque, ele aparecerá aqui.
-                      </p>
-                    </div>
+                    ) : withdrawals.length > 0 ? (
+                      <div className="space-y-4">
+                        {withdrawals.map((withdrawal) => {
+                          const status = formatStatus(withdrawal.status)
+                          return (
+                            <div key={withdrawal.id} className="bg-black/50 border border-green-900/50 rounded-lg p-4">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <p className="text-red-500 font-bold">{formatCurrency(withdrawal.amount)}</p>
+                                  <p className="text-sm text-gray-400 mt-1">
+                                    {new Date(withdrawal.created_at).toLocaleDateString("pt-BR")}
+                                  </p>
+                                </div>
+                                <div>
+                                  <span className={`px-2 py-1 rounded-full text-xs ${status.class}`}>
+                                    {status.text}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="mt-3 pt-3 border-t border-green-900/30">
+                                <p className="text-xs text-gray-400">Carteira USDT (TRC20)</p>
+                                <p className="text-sm text-gray-300 break-all">{withdrawal.pix_key}</p>
+                              </div>
+                              {withdrawal.notes && (
+                                <div className="mt-2">
+                                  <p className="text-xs text-gray-400">Observações</p>
+                                  <p className="text-sm text-gray-300">{withdrawal.notes}</p>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-10 text-center">
+                        <div className="w-16 h-16 rounded-full bg-gray-800/50 flex items-center justify-center mb-4">
+                          <Info className="h-8 w-8 text-gray-400" />
+                        </div>
+                        <h3 className="text-lg font-medium mb-2">Nenhum saque encontrado</h3>
+                        <p className="text-gray-400 max-w-md">
+                          Você ainda não realizou nenhum saque. Quando você solicitar um saque, ele aparecerá aqui.
+                        </p>
+                      </div>
+                    )}
                   </TabsContent>
                 </Tabs>
               </CardContent>
@@ -215,17 +446,25 @@ export default function SaquesPage() {
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <p className="text-sm text-gray-400">Saldo Disponível</p>
-                    <p className="text-2xl font-bold text-green-500">{formatCurrency(0)}</p>
+                    <p className="text-2xl font-bold text-green-500">{formatCurrency(userBalance)}</p>
                   </div>
 
                   <div className="space-y-2">
                     <p className="text-sm text-gray-400">Total de Saques</p>
-                    <p className="text-2xl font-bold text-red-500">{formatCurrency(0)}</p>
+                    <p className="text-2xl font-bold text-red-500">
+                      {formatCurrency(
+                        withdrawals.filter((w) => w.status === "approved").reduce((sum, w) => sum + (w.amount || 0), 0),
+                      )}
+                    </p>
                   </div>
 
                   <div className="space-y-2">
-                    <p className="text-sm text-gray-400">Saldo Investido</p>
-                    <p className="text-2xl font-bold text-yellow-500">{formatCurrency(0)}</p>
+                    <p className="text-sm text-gray-400">Saques Pendentes</p>
+                    <p className="text-2xl font-bold text-yellow-500">
+                      {formatCurrency(
+                        withdrawals.filter((w) => w.status === "pending").reduce((sum, w) => sum + (w.amount || 0), 0),
+                      )}
+                    </p>
                   </div>
 
                   <div className="border-t border-green-900/30 pt-4 mt-4">
@@ -287,17 +526,23 @@ export default function SaquesPage() {
               variant="outline"
               className="border-green-900/50 text-green-500 hover:bg-green-900/20"
               onClick={() => setShowConfirmation(false)}
+              disabled={submitting}
             >
               Cancelar
             </Button>
             <Button
               className="bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-black font-medium"
-              onClick={() => {
-                setShowConfirmation(false)
-                setActiveTab("history")
-              }}
+              onClick={confirmWithdrawal}
+              disabled={submitting}
             >
-              Confirmar Saque
+              {submitting ? (
+                <>
+                  <span className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></span>
+                  Processando...
+                </>
+              ) : (
+                "Confirmar Saque"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

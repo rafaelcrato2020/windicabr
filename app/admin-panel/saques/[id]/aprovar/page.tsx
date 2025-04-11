@@ -15,24 +15,43 @@ export default function ApproveWithdrawal({ params }: { params: { id: string } }
 
   useEffect(() => {
     const fetchWithdrawal = async () => {
-      const { data, error } = await supabase
-        .from("withdrawals")
-        .select("*, profiles(name, email)")
-        .eq("id", params.id)
-        .single()
+      try {
+        const { data, error } = await supabase.from("withdrawals").select("*").eq("id", params.id).single()
 
-      if (error) {
+        if (error) {
+          throw error
+        }
+
+        // Buscar informações do usuário
+        if (data.user_id) {
+          const { data: userData, error: userError } = await supabase
+            .from("profiles")
+            .select("name, email")
+            .eq("id", data.user_id)
+            .single()
+
+          if (!userError && userData) {
+            setWithdrawal({
+              ...data,
+              profiles: userData,
+            })
+          } else {
+            setWithdrawal(data)
+          }
+        } else {
+          setWithdrawal(data)
+        }
+      } catch (error: any) {
+        console.error("Erro ao buscar detalhes do saque:", error)
         toast({
           title: "Erro",
           description: "Não foi possível carregar os dados do saque",
           variant: "destructive",
         })
         router.push("/admin-panel/saques")
-        return
+      } finally {
+        setLoading(false)
       }
-
-      setWithdrawal(data)
-      setLoading(false)
     }
 
     fetchWithdrawal()
@@ -41,43 +60,74 @@ export default function ApproveWithdrawal({ params }: { params: { id: string } }
   const handleApprove = async () => {
     setProcessing(true)
 
-    // Atualizar o status do saque
-    const { error } = await supabase.from("withdrawals").update({ status: "approved" }).eq("id", params.id)
+    try {
+      // 1. Atualizar o status do saque
+      const { error: withdrawalError } = await supabase
+        .from("withdrawals")
+        .update({ status: "approved" })
+        .eq("id", params.id)
 
-    if (error) {
+      if (withdrawalError) {
+        throw new Error("Não foi possível aprovar o saque: " + withdrawalError.message)
+      }
+
+      // 2. Criar registro de transação (se ainda não existir)
+      const { data: existingTransaction, error: checkError } = await supabase
+        .from("transactions")
+        .select("id")
+        .eq("user_id", withdrawal.user_id)
+        .eq("type", "withdrawal")
+        .eq("amount", withdrawal.amount)
+        .eq("status", "pending")
+        .limit(1)
+
+      if (checkError) {
+        console.warn("Erro ao verificar transação existente:", checkError)
+      }
+
+      if (!existingTransaction || existingTransaction.length === 0) {
+        // Criar nova transação
+        const { error: transactionError } = await supabase.from("transactions").insert({
+          user_id: withdrawal.user_id,
+          amount: withdrawal.amount,
+          type: "withdrawal",
+          description: "Saque aprovado",
+          status: "completed",
+        })
+
+        if (transactionError) {
+          console.warn("Erro ao criar transação:", transactionError)
+          // Continuar mesmo com erro na criação da transação
+        }
+      } else {
+        // Atualizar transação existente
+        const { error: updateError } = await supabase
+          .from("transactions")
+          .update({ status: "completed", description: "Saque aprovado" })
+          .eq("id", existingTransaction[0].id)
+
+        if (updateError) {
+          console.warn("Erro ao atualizar transação:", updateError)
+          // Continuar mesmo com erro na atualização da transação
+        }
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Saque aprovado com sucesso",
+        variant: "default",
+      })
+
+      router.push("/admin-panel/saques")
+    } catch (error: any) {
+      console.error("Erro ao aprovar saque:", error)
       toast({
         title: "Erro",
-        description: "Não foi possível aprovar o saque",
+        description: error.message || "Não foi possível aprovar o saque",
         variant: "destructive",
       })
       setProcessing(false)
-      return
     }
-
-    // Criar registro de transação
-    const { error: transactionError } = await supabase.from("transactions").insert({
-      user_id: withdrawal.user_id,
-      amount: -withdrawal.amount,
-      type: "withdrawal",
-      description: "Saque aprovado",
-      status: "completed",
-    })
-
-    if (transactionError) {
-      toast({
-        title: "Aviso",
-        description: "Saque aprovado, mas houve um erro ao registrar a transação",
-        variant: "default",
-      })
-    }
-
-    toast({
-      title: "Sucesso",
-      description: "Saque aprovado com sucesso",
-      variant: "default",
-    })
-
-    router.push("/admin-panel/saques")
   }
 
   if (loading) {
@@ -125,35 +175,23 @@ export default function ApproveWithdrawal({ params }: { params: { id: string } }
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <p className="text-gray-400 text-sm">Usuário</p>
-            <p className="font-medium">{withdrawal.profiles?.name}</p>
+            <p className="font-medium">{withdrawal.profiles?.name || "Usuário"}</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm">Email</p>
-            <p className="font-medium">{withdrawal.profiles?.email}</p>
+            <p className="font-medium">{withdrawal.profiles?.email || "Não disponível"}</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm">Valor</p>
-            <p className="font-medium text-red-400">R$ {withdrawal.amount.toFixed(2)}</p>
-          </div>
-          <div>
-            <p className="text-gray-400 text-sm">Método</p>
-            <p className="font-medium">{withdrawal.payment_method || "Pix"}</p>
+            <p className="font-medium text-red-400">$ {Number.parseFloat(withdrawal.amount).toFixed(2)}</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm">Data</p>
             <p className="font-medium">{new Date(withdrawal.created_at).toLocaleDateString("pt-BR")}</p>
           </div>
-          <div>
-            <p className="text-gray-400 text-sm">Status</p>
-            <p className="font-medium">
-              <span className="px-2 py-1 rounded-full text-xs bg-yellow-500/20 text-yellow-400">Pendente</span>
-            </p>
-          </div>
           <div className="col-span-2">
             <p className="text-gray-400 text-sm">Carteira USDT (TRC20)</p>
-            <div className="bg-gray-700 p-3 rounded-lg break-all text-yellow-400 font-mono text-sm mt-1">
-              {withdrawal.pix_key || withdrawal.wallet}
-            </div>
+            <p className="font-medium font-mono break-all">{withdrawal.pix_key || "Não informado"}</p>
           </div>
         </div>
 
@@ -161,9 +199,9 @@ export default function ApproveWithdrawal({ params }: { params: { id: string } }
           <h3 className="text-lg font-medium mb-4">Confirmação</h3>
           <p className="text-gray-300 mb-6">
             Você está prestes a aprovar um saque de{" "}
-            <span className="font-bold text-red-400">R$ {withdrawal.amount.toFixed(2)}</span> para o usuário{" "}
-            <span className="font-bold">{withdrawal.profiles?.name}</span>. Certifique-se de que o pagamento foi
-            realizado antes de confirmar esta ação.
+            <span className="font-bold text-red-400">$ {Number.parseFloat(withdrawal.amount).toFixed(2)}</span> para o
+            usuário <span className="font-bold">{withdrawal.profiles?.name || "Usuário"}</span>. Esta ação não pode ser
+            desfeita.
           </p>
 
           <div className="flex space-x-4">

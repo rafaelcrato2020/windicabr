@@ -113,40 +113,14 @@ export default function AfiliadosPage() {
   const [userBalance, setUserBalance] = useState(0)
   const [loading, setLoading] = useState(true)
   const supabase = createBrowserClient()
+  const [error, setError] = useState<string | null>(null)
 
-  // Adicione este useEffect para buscar o saldo do usuário
+  // Verificar se o cliente Supabase está disponível
   useEffect(() => {
-    async function fetchUserBalance() {
-      try {
-        setLoading(true)
-
-        // Obter a sessão atual
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-
-        if (!session) {
-          console.error("Usuário não autenticado")
-          setLoading(false)
-          return
-        }
-
-        // Buscar o perfil do usuário com o saldo
-        const { data, error } = await supabase.from("profiles").select("balance").eq("id", session.user.id).single()
-
-        if (error) {
-          console.error("Erro ao buscar saldo:", error)
-        } else if (data) {
-          setUserBalance(data.balance || 0)
-        }
-      } catch (err) {
-        console.error("Erro ao buscar saldo:", err)
-      } finally {
-        setLoading(false)
-      }
+    if (!supabase) {
+      setError("Erro de conexão com o banco de dados. Por favor, tente novamente mais tarde.")
+      setLoading(false)
     }
-
-    fetchUserBalance()
   }, [supabase])
 
   // Estados para a calculadora
@@ -159,7 +133,75 @@ export default function AfiliadosPage() {
   const [level4Count, setLevel4Count] = useState(0)
   const [level4Amount, setLevel4Amount] = useState(0)
 
-  const referralLink = "https://windicabr.com/ref/usuario123"
+  // Modifique a parte que define o referralLink para buscar o código de referência real do usuário
+  // Substitua esta linha:
+  //const referralLink = "https://windicabr.com/ref/usuario123"
+
+  // Por este código que busca o código de referência do usuário:
+  const [referralLink, setReferralLink] = useState("Carregando...")
+  const [referralCode, setReferralCode] = useState("")
+
+  // Adicione este useEffect para buscar o código de referência do usuário
+  useEffect(() => {
+    async function fetchReferralCode() {
+      try {
+        if (!supabase) {
+          console.error("Cliente Supabase não disponível")
+          return
+        }
+        // Obter a sessão atual
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session) {
+          console.error("Usuário não autenticado")
+          return
+        }
+
+        // Verificar se o usuário já tem um código de referência
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("referral_code")
+          .eq("id", session.user.id)
+          .single()
+
+        if (error) {
+          console.error("Erro ao buscar código de referência:", error)
+          return
+        }
+
+        // Se o usuário não tiver um código de referência, gerar um novo
+        if (!data.referral_code) {
+          // Gerar um código de referência único baseado no ID do usuário
+          const newReferralCode = session.user.id.substring(0, 8)
+
+          // Atualizar o perfil do usuário com o novo código
+          const { error: updateError } = await supabase
+            .from("profiles")
+            .update({ referral_code: newReferralCode })
+            .eq("id", session.user.id)
+
+          if (updateError) {
+            console.error("Erro ao atualizar código de referência:", updateError)
+            return
+          }
+
+          setReferralCode(newReferralCode)
+          setReferralLink(`${window.location.origin}/cadastro?ref=${newReferralCode}`)
+        } else {
+          setReferralCode(data.referral_code)
+          setReferralLink(`${window.location.origin}/cadastro?ref=${data.referral_code}`)
+        }
+      } catch (err) {
+        console.error("Erro ao processar código de referência:", err)
+      }
+    }
+
+    if (supabase) {
+      fetchReferralCode()
+    }
+  }, [supabase])
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(referralLink)
@@ -262,6 +304,69 @@ export default function AfiliadosPage() {
   }
 
   const earnings = calculateEarnings()
+
+  // Adicione esta verificação no início do useEffect para buscar o saldo do usuário
+  useEffect(() => {
+    async function fetchUserBalance() {
+      try {
+        if (!supabase) {
+          console.error("Cliente Supabase não disponível")
+          return
+        }
+
+        // Obter a sessão atual
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session) {
+          console.error("Usuário não autenticado")
+          setLoading(false)
+          return
+        }
+
+        // Buscar o perfil do usuário com o saldo
+        const { data, error } = await supabase.from("profiles").select("balance").eq("id", session.user.id).single()
+
+        if (error) {
+          console.error("Erro ao buscar saldo:", error)
+        } else if (data) {
+          setUserBalance(data.balance || 0)
+        }
+      } catch (err) {
+        console.error("Erro ao buscar saldo:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (supabase) {
+      fetchUserBalance()
+    }
+  }, [supabase])
+
+  // Adicione esta renderização condicional para mostrar o erro, se houver
+  if (error) {
+    return (
+      <div className="flex flex-col min-h-screen">
+        <div className="container py-6">
+          <Card className="bg-black/40 border-red-900/50">
+            <CardContent className="p-6">
+              <div className="text-center py-8">
+                <p className="text-red-500 mb-4">{error}</p>
+                <Button
+                  onClick={() => window.location.reload()}
+                  className="bg-gradient-to-r from-green-600 to-yellow-500 hover:from-green-700 hover:to-yellow-600 text-black font-medium"
+                >
+                  Tentar novamente
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col min-h-screen">

@@ -33,35 +33,49 @@ function SidebarContent({ onItemClick }: { onItemClick?: () => void }) {
   const isMobile = useMobile()
   const supabase = createBrowserClient()
   const [userData, setUserData] = useState<UserData | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   // Buscar dados do usuário
   useEffect(() => {
     async function fetchUserData() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (session) {
-        // Buscar dados do usuário da tabela profiles
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("id, email, name")
-          .eq("id", session.user.id)
-          .single()
-
-        if (data && !error) {
-          setUserData(data)
-        } else {
-          // Fallback para os dados básicos do usuário
-          setUserData({
-            id: session.user.id,
-            email: session.user.email || "",
-          })
+      try {
+        if (!supabase) {
+          console.error("Cliente Supabase não disponível")
+          setError("Erro de conexão")
+          return
         }
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (session) {
+          // Buscar dados do usuário da tabela profiles
+          const { data, error: profileError } = await supabase
+            .from("profiles")
+            .select("id, email, name")
+            .eq("id", session.user.id)
+            .single()
+
+          if (data && !profileError) {
+            setUserData(data)
+          } else {
+            // Fallback para os dados básicos do usuário
+            setUserData({
+              id: session.user.id,
+              email: session.user.email || "",
+            })
+          }
+        }
+      } catch (err) {
+        console.error("Erro ao buscar dados do usuário:", err)
+        setError("Erro ao carregar dados")
       }
     }
 
-    fetchUserData()
+    if (supabase) {
+      fetchUserData()
+    }
   }, [supabase])
 
   return (

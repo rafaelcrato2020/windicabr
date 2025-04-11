@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -10,9 +10,28 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowLeft, Zap } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+
+// Adicione estas importações no topo do arquivo
+import { useSearchParams } from "next/navigation"
+import { createBrowserClient } from "@/utils/supabase/client"
 
 export default function CadastroPage() {
   const router = useRouter()
+  const { toast } = useToast()
+
+  // Adicione estas linhas logo após a declaração do componente CadastroPage
+  const searchParams = useSearchParams()
+  const refCode = searchParams.get("ref")
+  const [supabase, setSupabase] = useState<any>(null)
+
+  useEffect(() => {
+    // Inicializar o cliente Supabase após a montagem do componente
+    const client = createBrowserClient()
+    setSupabase(client)
+  }, [])
+
+  // Modifique o estado formData para incluir o código de referência
   const [formData, setFormData] = useState({
     nome: "",
     email: "",
@@ -20,8 +39,10 @@ export default function CadastroPage() {
     senha: "",
     confirmarSenha: "",
     termos: false,
+    referralCode: refCode || "", // Adicione o código de referência aqui
   })
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -32,15 +53,126 @@ export default function CadastroPage() {
     setFormData((prev) => ({ ...prev, termos: checked }))
   }
 
+  // Modifique a função handleSubmit para processar o código de referência
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setError("")
 
-    // Simulação de envio de dados
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    // Validar formulário
+    if (formData.senha !== formData.confirmarSenha) {
+      setError("As senhas não coincidem")
+      setLoading(false)
+      toast({
+        title: "Erro no cadastro",
+        description: "As senhas não coincidem",
+        variant: "destructive",
+      })
+      return
+    }
 
-    // Redirecionar para o dashboard após o cadastro
-    router.push("/dashboard")
+    if (!supabase) {
+      setError("Erro de conexão com o servidor")
+      setLoading(false)
+      toast({
+        title: "Erro no cadastro",
+        description: "Não foi possível conectar ao servidor. Tente novamente.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      console.log("Iniciando cadastro...")
+
+      // Registrar o usuário no Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.senha,
+        options: {
+          data: {
+            name: formData.nome,
+            phone: formData.telefone,
+          },
+        },
+      })
+
+      if (authError) {
+        console.error("Erro ao criar conta:", authError)
+        setError(authError.message)
+        toast({
+          title: "Erro no cadastro",
+          description: authError.message,
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
+
+      console.log("Usuário criado:", authData)
+
+      if (authData.user) {
+        // Gerar código de referência único baseado no ID do usuário
+        const referralCode = authData.user.id.substring(0, 8)
+
+        // Criar o perfil do usuário
+        const { error: profileError } = await supabase.from("profiles").insert({
+          id: authData.user.id,
+          name: formData.nome,
+          email: formData.email,
+          referred_by: formData.referralCode,
+          referral_code: referralCode,
+        })
+
+        if (profileError) {
+          console.error("Erro ao criar perfil:", profileError)
+          toast({
+            title: "Aviso",
+            description: "Conta criada, mas houve um problema ao configurar seu perfil.",
+            variant: "default",
+          })
+        }
+
+        // Processar código de referência se existir
+        if (formData.referralCode) {
+          try {
+            await fetch("/api/process-referral", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                userId: authData.user.id,
+                referralCode: formData.referralCode,
+              }),
+            })
+          } catch (refError) {
+            console.error("Erro ao processar referência:", refError)
+          }
+        }
+
+        toast({
+          title: "Cadastro realizado com sucesso!",
+          description: "Sua conta foi criada. Redirecionando para o dashboard...",
+          variant: "default",
+        })
+
+        // Redirecionar para o dashboard após o cadastro
+        setTimeout(() => {
+          router.push("/dashboard")
+        }, 2000)
+      }
+    } catch (error: any) {
+      console.error("Erro no cadastro:", error)
+      setError(error.message || "Erro ao criar conta")
+      toast({
+        title: "Erro no cadastro",
+        description: error.message || "Ocorreu um erro ao criar sua conta. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -90,6 +222,12 @@ export default function CadastroPage() {
                 </h1>
                 <p className="text-gray-400 mt-2">Crie sua conta e comece a investir nos maiores mercados do mundo</p>
               </div>
+
+              {error && (
+                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-md text-red-500 text-sm">
+                  {error}
+                </div>
+              )}
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">

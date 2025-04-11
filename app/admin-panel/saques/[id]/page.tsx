@@ -19,7 +19,11 @@ export default function WithdrawalDetailsPage({ params }: { params: { id: string
         setLoading(true)
 
         // Buscar o saque pelo ID
-        const { data, error } = await supabase.from("withdrawals").select("*").eq("id", params.id).single()
+        const { data, error } = await supabase
+          .from("withdrawals")
+          .select("*, investments(*)")
+          .eq("id", params.id)
+          .single()
 
         if (error) {
           throw error
@@ -93,6 +97,18 @@ export default function WithdrawalDetailsPage({ params }: { params: { id: string
     )
   }
 
+  // Função para formatar o tipo de saque
+  const formatWithdrawalType = (type: string) => {
+    switch (type) {
+      case "commission_and_earnings":
+        return "Comissões e Rendimentos"
+      case "principal":
+        return "Valor Principal"
+      default:
+        return "Saque Padrão"
+    }
+  }
+
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-3xl font-bold mb-8">Detalhes do Saque</h1>
@@ -139,6 +155,26 @@ export default function WithdrawalDetailsPage({ params }: { params: { id: string
             <p className="text-gray-400 text-sm">Data</p>
             <p className="font-medium">{new Date(withdrawal.created_at).toLocaleDateString("pt-BR")}</p>
           </div>
+          <div className="col-span-2">
+            <p className="text-gray-400 text-sm">Tipo de Saque</p>
+            <p className="font-medium text-yellow-400">{formatWithdrawalType(withdrawal.withdrawal_type)}</p>
+          </div>
+
+          {withdrawal.withdrawal_type === "principal" && withdrawal.investment_id && (
+            <div className="col-span-2">
+              <p className="text-gray-400 text-sm">Investimento</p>
+              <div className="bg-gray-700 p-3 rounded-md mt-1">
+                <div className="flex justify-between">
+                  <p className="text-sm">
+                    Valor: $ {Number.parseFloat(withdrawal.investments?.amount || 0).toFixed(2)}
+                  </p>
+                  <p className="text-sm">
+                    Data: {new Date(withdrawal.investments?.created_at || "").toLocaleDateString("pt-BR")}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="border-t border-gray-700 pt-4">

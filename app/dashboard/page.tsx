@@ -7,9 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { useMobile } from "@/hooks/use-mobile"
 
-// Vamos modificar a parte que exibe o saldo disponível para buscar os dados atualizados do banco de dados
-
-// Adicione estas importações no topo do arquivo, após as importações existentes
+// Importações
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@/utils/supabase/client"
 
@@ -110,17 +108,37 @@ function BalanceCard({
   )
 }
 
+// Interface para os dados financeiros
+interface FinancialSummary {
+  totalInvestment: number
+  totalEarnings: number
+  totalWithdrawals: number
+  totalCommissions: number
+  balance: number
+  investedBalance: number
+  dailyEarnings: number
+}
+
 // Modifique o componente DashboardPage para buscar o saldo do usuário
 export default function DashboardPage() {
   const [period, setPeriod] = useState("week")
   const isMobile = useMobile()
-  const [userBalance, setUserBalance] = useState(0)
+  const [financialData, setFinancialData] = useState<FinancialSummary>({
+    totalInvestment: 0,
+    totalEarnings: 0,
+    totalWithdrawals: 0,
+    totalCommissions: 0,
+    balance: 0,
+    investedBalance: 0,
+    dailyEarnings: 0,
+  })
   const [loading, setLoading] = useState(true)
   const supabase = createBrowserClient()
+  const [profileData, setProfileData] = useState<any>(null)
 
-  // Adicione este useEffect para buscar o saldo do usuário
+  // Buscar todos os dados financeiros do usuário
   useEffect(() => {
-    async function fetchUserBalance() {
+    async function fetchFinancialData() {
       try {
         setLoading(true)
 
@@ -135,34 +153,154 @@ export default function DashboardPage() {
           return
         }
 
-        // Buscar o perfil do usuário com o saldo
-        const { data, error } = await supabase.from("profiles").select("balance").eq("id", session.user.id).single()
+        const userId = session.user.id
 
-        if (error) {
-          console.error("Erro ao buscar saldo:", error)
-        } else if (data) {
-          setUserBalance(data.balance || 0)
+        // 1. Buscar o perfil do usuário com o saldo e dados pessoais
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("balance, name, email")
+          .eq("id", userId)
+          .single()
+
+        if (profileError) {
+          console.error("Erro ao buscar perfil:", profileError)
+        } else {
+          setProfileData(profileData)
         }
+
+        // 2. Buscar o total investido
+        const { data: investmentsData, error: investmentsError } = await supabase
+          .from("investments")
+          .select("amount, total_earnings")
+          .eq("user_id", userId)
+
+        if (investmentsError) {
+          console.error("Erro ao buscar investimentos:", investmentsError)
+        }
+
+        // 3. Buscar o total de saques
+        const { data: withdrawalsData, error: withdrawalsError } = await supabase
+          .from("withdrawals")
+          .select("amount")
+          .eq("user_id", userId)
+          .eq("status", "approved")
+
+        if (withdrawalsError) {
+          console.error("Erro ao buscar saques:", withdrawalsError)
+        }
+
+        // 4. Verificar se a tabela de comissões existe e buscar dados
+        let totalCommissions = 0
+
+        // Primeiro, tente buscar da tabela commissions
+        const { data: commissionsData, error: commissionsError } = await supabase
+          .from("commissions")
+          .select("amount")
+          .eq("user_id", userId)
+
+        if (!commissionsError) {
+          totalCommissions = commissionsData
+            ? commissionsData.reduce((sum, item) => sum + (Number.parseFloat(item.amount) || 0), 0)
+            : 0
+        } else {
+          console.log("Tabela commissions não encontrada ou erro:", commissionsError.message)
+
+          // Se falhar, tente buscar da tabela referral_commissions
+          try {
+            const { data: referralData, error: referralError } = await supabase
+              .from("referral_commissions")
+              .select("amount")
+              .eq("user_id", userId)
+
+            if (!referralError && referralData) {
+              totalCommissions = referralData.reduce((sum, item) => sum + (Number.parseFloat(item.amount) || 0), 0)
+            } else if (referralError) {
+              console.log("Erro ao buscar referral_commissions:", referralError.message)
+            }
+          } catch (err) {
+            console.log("Erro ao tentar buscar comissões:", err)
+          }
+        }
+
+        // 5. Calcular rendimento diário (último rendimento registrado)
+        let dailyEarnings = 0
+        try {
+          const today = new Date()
+          const yesterday = new Date(today)
+          yesterday.setDate(yesterday.getDate() - 1)
+
+          const { data: dailyEarningsData, error: dailyEarningsError } = await supabase
+            .from("yields")
+            .select("amount")
+            .eq("user_id", userId)
+            .gte("created_at", yesterday.toISOString())
+            .order("created_at", { ascending: false })
+            .limit(1)
+
+          if (!dailyEarningsError && dailyEarningsData && dailyEarningsData.length > 0) {
+            dailyEarnings = Number.parseFloat(dailyEarningsData[0].amount) || 0
+          } else if (dailyEarningsError) {
+            console.log("Erro ao buscar rendimento diário:", dailyEarningsError.message)
+          }
+        } catch (err) {
+          console.log("Erro ao processar rendimento diário:", err)
+        }
+
+        // Calcular os totais
+        const totalInvestment = investmentsData
+          ? investmentsData.reduce((sum, item) => sum + (Number.parseFloat(item.amount) || 0), 0)
+          : 0
+
+        const totalEarnings = investmentsData
+          ? investmentsData.reduce((sum, item) => sum + (Number.parseFloat(item.total_earnings) || 0), 0)
+          : 0
+
+        const totalWithdrawals = withdrawalsData
+          ? withdrawalsData.reduce((sum, item) => sum + (Number.parseFloat(item.amount) || 0), 0)
+          : 0
+
+        // Atualizar o estado com todos os dados financeiros
+        setFinancialData({
+          totalInvestment,
+          totalEarnings,
+          totalWithdrawals,
+          totalCommissions,
+          balance: profileData?.balance || 0,
+          investedBalance: totalInvestment,
+          dailyEarnings,
+        })
       } catch (err) {
-        console.error("Erro ao buscar saldo:", err)
+        console.error("Erro ao buscar dados financeiros:", err)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchUserBalance()
+    fetchFinancialData()
   }, [supabase])
 
-  // Resto do código permanece o mesmo...
+  // Calcular tendências (para mostrar setas para cima/baixo)
+  const getTrend = (value: number) => {
+    if (value > 0) return "up"
+    if (value < 0) return "down"
+    return "neutral"
+  }
 
-  // Modifique o BalanceCard para o saldo disponível para usar o valor buscado do banco
+  // Resto do código permanece o mesmo...
   return (
     <div className="flex flex-col min-h-screen">
       <header className="sticky top-0 z-40 border-b border-green-900/30 bg-black/80 backdrop-blur-xl md:flex hidden">
         <div className="container flex h-16 items-center justify-between py-4">
           <h1 className="text-xl font-bold">Painel de Controle</h1>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-400">Bem-vindo, Investidor</span>
+            {profileData ? (
+              <div className="flex flex-col items-end">
+                <span className="text-sm font-medium text-white">{profileData.name || "Usuário"}</span>
+                <span className="text-xs text-gray-400">{profileData.email}</span>
+              </div>
+            ) : (
+              <span className="text-sm text-gray-400">Carregando...</span>
+            )}
           </div>
         </div>
       </header>
@@ -176,26 +314,26 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <BalanceCard
                 title="Saldo Disponível"
-                value={formatCurrency(userBalance)}
+                value={formatCurrency(financialData.balance)}
                 icon={Wallet}
-                trend="neutral"
-                trendValue="0%"
+                trend={getTrend(financialData.balance)}
+                trendValue={financialData.balance > 0 ? "+100%" : "0%"}
                 color="green"
               />
               <BalanceCard
                 title="Saldo Investido"
-                value={formatCurrency(0)}
+                value={formatCurrency(financialData.investedBalance)}
                 icon={DollarSign}
-                trend="neutral"
-                trendValue="0%"
+                trend={getTrend(financialData.investedBalance)}
+                trendValue={financialData.investedBalance > 0 ? "+100%" : "0%"}
                 color="yellow"
               />
               <BalanceCard
                 title="Rendimento Diário"
-                value={formatCurrency(0)}
+                value={formatCurrency(financialData.dailyEarnings)}
                 icon={TrendingUp}
-                trend="neutral"
-                trendValue="0%"
+                trend={getTrend(financialData.dailyEarnings)}
+                trendValue={financialData.dailyEarnings > 0 ? "+100%" : "0%"}
                 color="green"
               />
             </div>
@@ -290,7 +428,9 @@ export default function DashboardPage() {
                     Ver Todas
                   </a>
                 </div>
-                <div className="text-center py-8 text-gray-400">Nenhuma transação encontrada.</div>
+                <div className="text-center py-8 text-gray-400">
+                  {loading ? "Carregando transações..." : "Nenhuma transação encontrada."}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -301,18 +441,18 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 lg:grid-cols-1 gap-3">
               <BalanceCard
                 title="Total de Saques"
-                value={formatCurrency(0)}
+                value={formatCurrency(financialData.totalWithdrawals)}
                 icon={BarChart3}
-                trend="neutral"
-                trendValue="0%"
+                trend={getTrend(financialData.totalWithdrawals)}
+                trendValue={financialData.totalWithdrawals > 0 ? "+100%" : "0%"}
                 color="red"
               />
               <BalanceCard
                 title="Comissões de Indicação"
-                value={formatCurrency(0)}
+                value={formatCurrency(financialData.totalCommissions)}
                 icon={Users}
-                trend="neutral"
-                trendValue="0%"
+                trend={getTrend(financialData.totalCommissions)}
+                trendValue={financialData.totalCommissions > 0 ? "+100%" : "0%"}
                 color="green"
               />
             </div>
@@ -324,19 +464,27 @@ export default function DashboardPage() {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center border-b border-green-900/30 pb-2">
                     <span className="text-sm text-gray-400">Investimento Total</span>
-                    <span className="text-sm font-medium text-yellow-500">{formatCurrency(0)}</span>
+                    <span className="text-sm font-medium text-yellow-500">
+                      {formatCurrency(financialData.totalInvestment)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center border-b border-green-900/30 pb-2">
                     <span className="text-sm text-gray-400">Rendimento Total</span>
-                    <span className="text-sm font-medium text-green-500">{formatCurrency(0)}</span>
+                    <span className="text-sm font-medium text-green-500">
+                      {formatCurrency(financialData.totalEarnings)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center border-b border-green-900/30 pb-2">
                     <span className="text-sm text-gray-400">Saques Realizados</span>
-                    <span className="text-sm font-medium text-red-500">{formatCurrency(0)}</span>
+                    <span className="text-sm font-medium text-red-500">
+                      {formatCurrency(financialData.totalWithdrawals)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-400">Comissões Recebidas</span>
-                    <span className="text-sm font-medium text-green-500">{formatCurrency(0)}</span>
+                    <span className="text-sm font-medium text-green-500">
+                      {formatCurrency(financialData.totalCommissions)}
+                    </span>
                   </div>
                 </div>
               </CardContent>

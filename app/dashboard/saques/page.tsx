@@ -5,7 +5,7 @@ import { DialogFooter } from "@/components/ui/dialog"
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { AlertCircle, Info } from "lucide-react"
+import { AlertCircle, Info, Lock, Unlock } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,10 +13,8 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
-// Vamos modificar a parte que exibe o saldo disponível para buscar os dados atualizados do banco de dados
-
-// Adicione estas importações no topo do arquivo, após as importações existentes
 import { createBrowserClient } from "@/utils/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 
@@ -38,8 +36,17 @@ function formatNumber(value: number): string {
   }).format(value)
 }
 
+// Interface para investimentos
+interface Investment {
+  id: string
+  amount: number
+  total_earnings: number
+  created_at: string
+  status: string
+  is_withdrawable: boolean
+}
+
 export default function SaquesPage() {
-  // Alterar o valor inicial para 0
   const [withdrawAmount, setWithdrawAmount] = useState(0)
   const [withdrawAmountFormatted, setWithdrawAmountFormatted] = useState("0,00")
   const [walletAddress, setWalletAddress] = useState("")
@@ -47,13 +54,20 @@ export default function SaquesPage() {
   const [activeTab, setActiveTab] = useState("withdraw")
   const [showMinimumAlert, setShowMinimumAlert] = useState(false)
   const [userBalance, setUserBalance] = useState(0)
+  const [commissionBalance, setCommissionBalance] = useState(0)
+  const [earningsBalance, setEarningsBalance] = useState(0)
+  const [withdrawableBalance, setWithdrawableBalance] = useState(0)
+  const [withdrawablePrincipal, setWithdrawablePrincipal] = useState(0)
+  const [investments, setInvestments] = useState<Investment[]>([])
+  const [selectedWithdrawalType, setSelectedWithdrawalType] = useState("earnings_commissions")
+  const [selectedInvestment, setSelectedInvestment] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [withdrawals, setWithdrawals] = useState<any[]>([])
   const supabase = createBrowserClient()
   const { toast } = useToast()
 
-  // Adicione este useEffect para buscar o saldo do usuário e histórico de saques
+  // Buscar dados do usuário, incluindo saldo, comissões, rendimentos e investimentos
   useEffect(() => {
     async function fetchUserData() {
       try {
@@ -71,12 +85,82 @@ export default function SaquesPage() {
         }
 
         // Buscar o perfil do usuário com o saldo
-        const { data, error } = await supabase.from("profiles").select("balance").eq("id", session.user.id).single()
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("balance, invested_balance")
+          .eq("id", session.user.id)
+          .single()
 
-        if (error) {
-          console.error("Erro ao buscar saldo:", error)
-        } else if (data) {
-          setUserBalance(data.balance || 0)
+        if (profileError) {
+          console.error("Erro ao buscar perfil:", profileError)
+        } else if (profileData) {
+          setUserBalance(profileData.balance || 0)
+
+          // Buscar comissões de indicações
+          const { data: commissionsData, error: commissionsError } = await supabase
+            .from("transactions")
+            .select("amount")
+            .eq("user_id", session.user.id)
+            .eq("type", "commission")
+            .eq("status", "completed")
+
+          if (commissionsError) {
+            console.error("Erro ao buscar comissões:", commissionsError)
+          } else {
+            const totalCommissions = commissionsData.reduce((sum, item) => sum + (item.amount || 0), 0)
+            setCommissionBalance(totalCommissions)
+          }
+
+          // Buscar rendimentos
+          const { data: earningsData, error: earningsError } = await supabase
+            .from("transactions")
+            .select("amount")
+            .eq("user_id", session.user.id)
+            .eq("type", "earning")
+            .eq("status", "completed")
+
+          if (earningsError) {
+            console.error("Erro ao buscar rendimentos:", earningsError)
+          } else {
+            const totalEarnings = earningsData.reduce((sum, item) => sum + (item.amount || 0), 0)
+            setEarningsBalance(totalEarnings)
+          }
+
+          // Calcular saldo disponível para saque (comissões + rendimentos)
+          const totalWithdrawable =
+            (commissionsData ? commissionsData.reduce((sum, item) => sum + (item.amount || 0), 0) : 0) +
+            (earningsData ? earningsData.reduce((sum, item) => sum + (item.amount || 0), 0) : 0)
+          setWithdrawableBalance(totalWithdrawable)
+
+          // Buscar investimentos
+          const { data: investmentsData, error: investmentsError } = await supabase
+            .from("investments")
+            .select("id, amount, total_earnings, created_at, status")
+            .eq("user_id", session.user.id)
+            .eq("status", "active")
+
+          if (investmentsError) {
+            console.error("Erro ao buscar investimentos:", investmentsError)
+          } else if (investmentsData) {
+            // Processar investimentos para determinar quais podem ser sacados
+            const processedInvestments = investmentsData.map((investment) => {
+              // Um investimento pode ser sacado quando o total de rendimentos é >= 100% do valor investido
+              const isWithdrawable = (investment.total_earnings || 0) >= investment.amount
+              return {
+                ...investment,
+                is_withdrawable: isWithdrawable,
+              }
+            })
+
+            setInvestments(processedInvestments)
+
+            // Calcular o total de principal que pode ser sacado
+            const totalWithdrawablePrincipal = processedInvestments
+              .filter((inv) => inv.is_withdrawable)
+              .reduce((sum, inv) => sum + inv.amount, 0)
+
+            setWithdrawablePrincipal(totalWithdrawablePrincipal)
+          }
         }
 
         // Buscar histórico de saques
@@ -106,19 +190,76 @@ export default function SaquesPage() {
     setWithdrawAmountFormatted(formatNumber(withdrawAmount))
   }, [])
 
+  // Atualizar o valor máximo quando o tipo de saque muda
+  useEffect(() => {
+    if (selectedWithdrawalType === "earnings_commissions") {
+      if (withdrawAmount > withdrawableBalance) {
+        setWithdrawAmount(withdrawableBalance)
+        setWithdrawAmountFormatted(formatNumber(withdrawableBalance))
+      }
+    } else if (selectedWithdrawalType === "principal" && selectedInvestment) {
+      const investment = investments.find((inv) => inv.id === selectedInvestment)
+      if (investment && withdrawAmount > investment.amount) {
+        setWithdrawAmount(investment.amount)
+        setWithdrawAmountFormatted(formatNumber(investment.amount))
+      }
+    }
+  }, [selectedWithdrawalType, selectedInvestment, withdrawableBalance, investments, withdrawAmount])
+
   const handleWithdraw = () => {
     if (withdrawAmount < 2.2) {
       setShowMinimumAlert(true)
       return
     }
 
-    if (withdrawAmount > userBalance) {
+    if (selectedWithdrawalType === "earnings_commissions" && withdrawAmount > withdrawableBalance) {
       toast({
         title: "Erro",
-        description: "Saldo insuficiente para realizar este saque",
+        description:
+          "Saldo insuficiente para realizar este saque. Você só pode sacar comissões e rendimentos disponíveis.",
         variant: "destructive",
       })
       return
+    }
+
+    if (selectedWithdrawalType === "principal") {
+      if (!selectedInvestment) {
+        toast({
+          title: "Erro",
+          description: "Selecione um investimento para sacar o valor principal.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const investment = investments.find((inv) => inv.id === selectedInvestment)
+      if (!investment) {
+        toast({
+          title: "Erro",
+          description: "Investimento não encontrado.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      if (!investment.is_withdrawable) {
+        toast({
+          title: "Erro",
+          description:
+            "Este investimento ainda não pode ser sacado. É necessário que ele gere 100% de retorno primeiro.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      if (withdrawAmount > investment.amount) {
+        toast({
+          title: "Erro",
+          description: "O valor do saque não pode exceder o valor do investimento.",
+          variant: "destructive",
+        })
+        return
+      }
     }
 
     if (withdrawAmount >= 2.2 && walletAddress) {
@@ -188,29 +329,91 @@ export default function SaquesPage() {
         throw new Error("Erro ao verificar saldo")
       }
 
-      const currentBalance = userData.balance || 0
+      // Verificar tipo de saque e validar
+      if (selectedWithdrawalType === "earnings_commissions") {
+        // Verificar se o valor do saque não excede o saldo disponível para saque
+        if (withdrawAmount > withdrawableBalance) {
+          throw new Error(
+            "Saldo insuficiente para realizar este saque. Você só pode sacar comissões e rendimentos disponíveis.",
+          )
+        }
 
-      if (withdrawAmount > currentBalance) {
-        throw new Error("Saldo insuficiente para realizar este saque")
+        // 1. Criar registro de saque
+        const { data: withdrawal, error: withdrawalError } = await supabase
+          .from("withdrawals")
+          .insert({
+            user_id: session.user.id,
+            amount: withdrawAmount,
+            pix_key: walletAddress,
+            status: "pending",
+            withdrawal_type: "commission_and_earnings",
+          })
+          .select()
+
+        if (withdrawalError) {
+          throw new Error("Erro ao registrar solicitação de saque")
+        }
+      } else if (selectedWithdrawalType === "principal") {
+        if (!selectedInvestment) {
+          throw new Error("Selecione um investimento para sacar o valor principal.")
+        }
+
+        // Verificar se o investimento existe e pode ser sacado
+        const { data: investmentData, error: investmentError } = await supabase
+          .from("investments")
+          .select("id, amount, total_earnings, status")
+          .eq("id", selectedInvestment)
+          .eq("user_id", session.user.id)
+          .single()
+
+        if (investmentError || !investmentData) {
+          throw new Error("Investimento não encontrado ou não pertence a este usuário.")
+        }
+
+        // Verificar se o investimento já rendeu 100%
+        if ((investmentData.total_earnings || 0) < investmentData.amount) {
+          throw new Error(
+            "Este investimento ainda não pode ser sacado. É necessário que ele gere 100% de retorno primeiro.",
+          )
+        }
+
+        // Verificar se o valor do saque não excede o valor do investimento
+        if (withdrawAmount > investmentData.amount) {
+          throw new Error("O valor do saque não pode exceder o valor do investimento.")
+        }
+
+        // 1. Criar registro de saque
+        const { data: withdrawal, error: withdrawalError } = await supabase
+          .from("withdrawals")
+          .insert({
+            user_id: session.user.id,
+            amount: withdrawAmount,
+            pix_key: walletAddress,
+            status: "pending",
+            withdrawal_type: "principal",
+            investment_id: selectedInvestment,
+          })
+          .select()
+
+        if (withdrawalError) {
+          throw new Error("Erro ao registrar solicitação de saque")
+        }
+
+        // 2. Atualizar status do investimento se o valor sacado for igual ao valor do investimento
+        if (withdrawAmount === investmentData.amount) {
+          const { error: updateInvestmentError } = await supabase
+            .from("investments")
+            .update({ status: "closed" })
+            .eq("id", selectedInvestment)
+
+          if (updateInvestmentError) {
+            console.error("Erro ao atualizar status do investimento:", updateInvestmentError)
+          }
+        }
       }
 
-      // 1. Criar registro de saque
-      const { data: withdrawal, error: withdrawalError } = await supabase
-        .from("withdrawals")
-        .insert({
-          user_id: session.user.id,
-          amount: withdrawAmount,
-          pix_key: walletAddress,
-          status: "pending",
-        })
-        .select()
-
-      if (withdrawalError) {
-        throw new Error("Erro ao registrar solicitação de saque")
-      }
-
-      // 2. Atualizar saldo do usuário
-      const newBalance = currentBalance - withdrawAmount
+      // 3. Atualizar saldo do usuário
+      const newBalance = userData.balance - withdrawAmount
       const { error: updateError } = await supabase
         .from("profiles")
         .update({ balance: newBalance })
@@ -220,17 +423,40 @@ export default function SaquesPage() {
         throw new Error("Erro ao atualizar saldo")
       }
 
-      // 3. Criar registro de transação
+      // 4. Criar registro de transação
       await supabase.from("transactions").insert({
         user_id: session.user.id,
         amount: withdrawAmount,
         type: "withdrawal",
-        description: "Solicitação de saque",
+        description:
+          selectedWithdrawalType === "earnings_commissions"
+            ? "Solicitação de saque (comissões e rendimentos)"
+            : "Solicitação de saque (valor principal)",
         status: "pending",
       })
 
       // Atualizar saldo local
       setUserBalance(newBalance)
+
+      if (selectedWithdrawalType === "earnings_commissions") {
+        setWithdrawableBalance(withdrawableBalance - withdrawAmount)
+      } else if (selectedWithdrawalType === "principal" && selectedInvestment) {
+        // Atualizar a lista de investimentos
+        setInvestments((prevInvestments) =>
+          prevInvestments.map((inv) =>
+            inv.id === selectedInvestment
+              ? {
+                  ...inv,
+                  amount: withdrawAmount === inv.amount ? 0 : inv.amount - withdrawAmount,
+                  status: withdrawAmount === inv.amount ? "closed" : "active",
+                }
+              : inv,
+          ),
+        )
+
+        // Recalcular o total de principal que pode ser sacado
+        setWithdrawablePrincipal((prev) => prev - withdrawAmount)
+      }
 
       // Atualizar lista de saques
       const { data: updatedWithdrawals } = await supabase
@@ -256,6 +482,7 @@ export default function SaquesPage() {
       setWalletAddress("")
       setShowConfirmation(false)
       setActiveTab("history")
+      setSelectedInvestment(null)
     } catch (error: any) {
       console.error("Erro ao processar saque:", error)
       toast({
@@ -281,7 +508,17 @@ export default function SaquesPage() {
     }
   }
 
-  // Modifique a parte que exibe o saldo disponível
+  // Função para formatar data
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("pt-BR")
+  }
+
+  // Função para calcular o percentual de rendimento
+  const calculateReturnPercentage = (investment: Investment) => {
+    if (!investment.amount) return 0
+    return ((investment.total_earnings || 0) / investment.amount) * 100
+  }
+
   return (
     <div className="flex flex-col min-h-screen">
       <header className="sticky top-0 z-40 border-b border-green-900/30 bg-black/80 backdrop-blur-xl">
@@ -296,7 +533,7 @@ export default function SaquesPage() {
             <Card className="bg-black/40 border-green-900/50">
               <CardHeader>
                 <CardTitle>Solicitar Saque</CardTitle>
-                <CardDescription>Saque seus rendimentos em USDT para sua carteira.</CardDescription>
+                <CardDescription>Saque suas comissões, rendimentos ou valor principal quando elegível.</CardDescription>
               </CardHeader>
               <CardContent>
                 <Tabs defaultValue="withdraw" value={activeTab} onValueChange={setActiveTab}>
@@ -309,17 +546,100 @@ export default function SaquesPage() {
                       <AlertCircle className="h-4 w-4" />
                       <AlertTitle>Informação</AlertTitle>
                       <AlertDescription>
-                        Saque mínimo: $2,20 USDT. Os saques são processados em até 24 horas.
+                        Você pode sacar comissões e rendimentos a qualquer momento. O valor principal investido só pode
+                        ser sacado quando o investimento render 100% do valor investido. Saque mínimo: $2,20 USDT.
                       </AlertDescription>
                     </Alert>
 
                     <div className="space-y-4">
                       <div className="space-y-2">
+                        <Label className="text-sm font-medium">Tipo de Saque</Label>
+                        <RadioGroup
+                          value={selectedWithdrawalType}
+                          onValueChange={setSelectedWithdrawalType}
+                          className="grid grid-cols-1 md:grid-cols-2 gap-2"
+                        >
+                          <div
+                            className={`flex items-center space-x-2 rounded-md border ${selectedWithdrawalType === "earnings_commissions" ? "border-green-500" : "border-green-900/50"} p-3 bg-black/30`}
+                          >
+                            <RadioGroupItem value="earnings_commissions" id="earnings_commissions" />
+                            <Label htmlFor="earnings_commissions" className="flex-1 cursor-pointer">
+                              <div className="font-medium">Comissões e Rendimentos</div>
+                              <div className="text-sm text-gray-400">
+                                Disponível: {formatCurrency(withdrawableBalance)}
+                              </div>
+                            </Label>
+                          </div>
+                          <div
+                            className={`flex items-center space-x-2 rounded-md border ${selectedWithdrawalType === "principal" ? "border-green-500" : "border-green-900/50"} p-3 bg-black/30`}
+                          >
+                            <RadioGroupItem value="principal" id="principal" />
+                            <Label htmlFor="principal" className="flex-1 cursor-pointer">
+                              <div className="font-medium">Valor Principal</div>
+                              <div className="text-sm text-gray-400">
+                                Disponível: {formatCurrency(withdrawablePrincipal)}
+                              </div>
+                            </Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+
+                      {selectedWithdrawalType === "principal" && (
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Selecione o Investimento</Label>
+                          <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                            {investments.length > 0 ? (
+                              investments.map((investment) => (
+                                <div
+                                  key={investment.id}
+                                  className={`flex items-center justify-between rounded-md border ${selectedInvestment === investment.id ? "border-green-500" : "border-green-900/50"} p-3 bg-black/30 cursor-pointer ${!investment.is_withdrawable ? "opacity-70" : ""}`}
+                                  onClick={() => investment.is_withdrawable && setSelectedInvestment(investment.id)}
+                                >
+                                  <div className="flex-1">
+                                    <div className="flex items-center justify-between">
+                                      <div className="font-medium">{formatCurrency(investment.amount)}</div>
+                                      <div className="text-xs text-gray-400">{formatDate(investment.created_at)}</div>
+                                    </div>
+                                    <div className="flex items-center justify-between mt-1">
+                                      <div className="text-sm text-gray-400">
+                                        Rendimento: {formatCurrency(investment.total_earnings || 0)}
+                                        <span className="ml-1 text-xs">
+                                          ({calculateReturnPercentage(investment).toFixed(0)}%)
+                                        </span>
+                                      </div>
+                                      {investment.is_withdrawable ? (
+                                        <span className="flex items-center text-xs text-green-500">
+                                          <Unlock className="h-3 w-3 mr-1" /> Disponível
+                                        </span>
+                                      ) : (
+                                        <span className="flex items-center text-xs text-yellow-500">
+                                          <Lock className="h-3 w-3 mr-1" /> Bloqueado
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-center py-4 text-gray-400">Nenhum investimento encontrado</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <Label htmlFor="amount" className="text-sm font-medium">
                             Valor do Saque (USDT)
                           </Label>
-                          <span className="text-sm text-gray-400">Saldo disponível: {formatCurrency(userBalance)}</span>
+                          <span className="text-sm text-gray-400">
+                            Disponível:{" "}
+                            {selectedWithdrawalType === "earnings_commissions"
+                              ? formatCurrency(withdrawableBalance)
+                              : selectedInvestment
+                                ? formatCurrency(investments.find((inv) => inv.id === selectedInvestment)?.amount || 0)
+                                : "Selecione um investimento"}
+                          </span>
                         </div>
                         {/* Campo de entrada com formatação */}
                         <div className="flex items-center gap-2">
@@ -337,8 +657,16 @@ export default function SaquesPage() {
                             variant="outline"
                             className="border-green-900/50 text-green-500 hover:bg-green-900/20"
                             onClick={() => {
-                              setWithdrawAmount(userBalance)
-                              setWithdrawAmountFormatted(formatNumber(userBalance))
+                              if (selectedWithdrawalType === "earnings_commissions") {
+                                setWithdrawAmount(withdrawableBalance)
+                                setWithdrawAmountFormatted(formatNumber(withdrawableBalance))
+                              } else if (selectedWithdrawalType === "principal" && selectedInvestment) {
+                                const investment = investments.find((inv) => inv.id === selectedInvestment)
+                                if (investment) {
+                                  setWithdrawAmount(investment.amount)
+                                  setWithdrawAmountFormatted(formatNumber(investment.amount))
+                                }
+                              }
                               setShowMinimumAlert(false)
                             }}
                           >
@@ -374,7 +702,12 @@ export default function SaquesPage() {
                         <Button
                           className="w-full bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-black font-medium"
                           onClick={handleWithdraw}
-                          disabled={!walletAddress}
+                          disabled={
+                            !walletAddress ||
+                            (selectedWithdrawalType === "earnings_commissions" && withdrawableBalance <= 0) ||
+                            (selectedWithdrawalType === "principal" &&
+                              (!selectedInvestment || withdrawablePrincipal <= 0))
+                          }
                         >
                           Solicitar Saque
                         </Button>
@@ -404,6 +737,14 @@ export default function SaquesPage() {
                                     {status.text}
                                   </span>
                                 </div>
+                              </div>
+                              <div className="mt-2">
+                                <p className="text-xs text-gray-400">Tipo</p>
+                                <p className="text-sm text-gray-300">
+                                  {withdrawal.withdrawal_type === "principal"
+                                    ? "Valor Principal"
+                                    : "Comissões e Rendimentos"}
+                                </p>
                               </div>
                               <div className="mt-3 pt-3 border-t border-green-900/30">
                                 <p className="text-xs text-gray-400">Carteira USDT (TRC20)</p>
@@ -445,25 +786,30 @@ export default function SaquesPage() {
               <CardContent>
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <p className="text-sm text-gray-400">Saldo Disponível</p>
+                    <p className="text-sm text-gray-400">Saldo Total</p>
                     <p className="text-2xl font-bold text-green-500">{formatCurrency(userBalance)}</p>
                   </div>
 
                   <div className="space-y-2">
-                    <p className="text-sm text-gray-400">Total de Saques</p>
-                    <p className="text-2xl font-bold text-red-500">
-                      {formatCurrency(
-                        withdrawals.filter((w) => w.status === "approved").reduce((sum, w) => sum + (w.amount || 0), 0),
-                      )}
-                    </p>
+                    <p className="text-sm text-gray-400">Comissões e Rendimentos</p>
+                    <p className="text-2xl font-bold text-yellow-500">{formatCurrency(withdrawableBalance)}</p>
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <div className="bg-black/30 p-2 rounded-md">
+                        <p className="text-xs text-gray-400">Comissões</p>
+                        <p className="text-sm font-medium text-green-500">{formatCurrency(commissionBalance)}</p>
+                      </div>
+                      <div className="bg-black/30 p-2 rounded-md">
+                        <p className="text-xs text-gray-400">Rendimentos</p>
+                        <p className="text-sm font-medium text-green-500">{formatCurrency(earningsBalance)}</p>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
-                    <p className="text-sm text-gray-400">Saques Pendentes</p>
-                    <p className="text-2xl font-bold text-yellow-500">
-                      {formatCurrency(
-                        withdrawals.filter((w) => w.status === "pending").reduce((sum, w) => sum + (w.amount || 0), 0),
-                      )}
+                    <p className="text-sm text-gray-400">Principal Disponível para Saque</p>
+                    <p className="text-2xl font-bold text-blue-500">{formatCurrency(withdrawablePrincipal)}</p>
+                    <p className="text-xs text-gray-400">
+                      Investimentos que já renderam 100% do valor investido podem ter o principal sacado.
                     </p>
                   </div>
 
@@ -474,6 +820,7 @@ export default function SaquesPage() {
                       <p>• Rede suportada: TRC20</p>
                       <p>• Tempo de processamento: até 24h</p>
                       <p>• Taxa de saque: 0%</p>
+                      <p>• Principal só pode ser sacado após 100% de rendimento</p>
                     </div>
                   </div>
                 </div>
@@ -492,6 +839,20 @@ export default function SaquesPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="bg-black/50 border border-green-900/50 rounded-lg p-4 space-y-3">
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-400">Tipo de Saque:</span>
+                <span className="text-sm font-medium text-white">
+                  {selectedWithdrawalType === "earnings_commissions" ? "Comissões e Rendimentos" : "Valor Principal"}
+                </span>
+              </div>
+              {selectedWithdrawalType === "principal" && selectedInvestment && (
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-400">Investimento:</span>
+                  <span className="text-sm font-medium text-white">
+                    {formatCurrency(investments.find((inv) => inv.id === selectedInvestment)?.amount || 0)}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-sm text-gray-400">Valor do Saque:</span>
                 <span className="text-sm font-medium text-white">{formatCurrency(withdrawAmount)} USDT</span>

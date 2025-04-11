@@ -13,6 +13,16 @@ import { useMobile } from "@/hooks/use-mobile"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
+// Adicione estes imports no topo do arquivo
+import { createBrowserClient } from "@/utils/supabase/client"
+
+// Adicione esta interface antes do componente DashboardLayout
+interface UserData {
+  id: string
+  email: string
+  name?: string
+}
+
 interface DashboardLayoutProps {
   children: React.ReactNode
 }
@@ -21,6 +31,38 @@ function SidebarContent({ onItemClick }: { onItemClick?: () => void }) {
   const pathname = usePathname()
   const { profilePhoto } = useUser()
   const isMobile = useMobile()
+  const supabase = createBrowserClient()
+  const [userData, setUserData] = useState<UserData | null>(null)
+
+  // Buscar dados do usuário
+  useEffect(() => {
+    async function fetchUserData() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (session) {
+        // Buscar dados do usuário da tabela profiles
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, email, name")
+          .eq("id", session.user.id)
+          .single()
+
+        if (data && !error) {
+          setUserData(data)
+        } else {
+          // Fallback para os dados básicos do usuário
+          setUserData({
+            id: session.user.id,
+            email: session.user.email || "",
+          })
+        }
+      }
+    }
+
+    fetchUserData()
+  }, [supabase])
 
   return (
     <div className="flex flex-col h-full">
@@ -39,8 +81,19 @@ function SidebarContent({ onItemClick }: { onItemClick?: () => void }) {
           </div>
         </div>
         <div className="text-center">
-          <p className="font-medium text-white">Investidor</p>
-          <p className="text-xs text-gray-400">investidor@email.com</p>
+          <div className="text-center">
+            {userData ? (
+              <>
+                <p className="font-medium text-white">{userData.name || "Usuário"}</p>
+                <p className="text-xs text-gray-400">{userData.email}</p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-white">Carregando...</p>
+                <p className="text-xs text-gray-400">...</p>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

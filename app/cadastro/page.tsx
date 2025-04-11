@@ -95,6 +95,7 @@ export default function CadastroPage() {
           data: {
             name: formData.nome,
             phone: formData.telefone,
+            email_confirmed: true, // Marcar o e-mail como confirmado
           },
         },
       })
@@ -166,15 +167,36 @@ export default function CadastroPage() {
           }
         }
 
+        // Fazer login automaticamente após o cadastro
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.senha,
+        })
+
+        if (signInError) {
+          console.error("Erro ao fazer login automático:", signInError)
+          toast({
+            title: "Cadastro realizado com sucesso!",
+            description: "Sua conta foi criada. Redirecionando para o login...",
+            variant: "default",
+          })
+
+          // Redirecionar para a página de login se o login automático falhar
+          setTimeout(() => {
+            router.push("/login")
+          }, 2000)
+          return
+        }
+
         toast({
           title: "Cadastro realizado com sucesso!",
-          description: "Sua conta foi criada. Redirecionando para o login...",
+          description: "Sua conta foi criada. Redirecionando para o dashboard...",
           variant: "default",
         })
 
-        // Redirecionar para a página de login após o cadastro
+        // Redirecionar para o dashboard após o login bem-sucedido
         setTimeout(() => {
-          router.push("/login")
+          router.push("/dashboard")
         }, 2000)
       }
     } catch (error: any) {

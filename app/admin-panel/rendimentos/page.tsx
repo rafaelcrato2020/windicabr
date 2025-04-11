@@ -55,6 +55,32 @@ export default function YieldsPage() {
     fetchYieldHistory()
   }, [supabase, processing])
 
+  // Verificar se a tabela available_earnings existe
+  const checkAndCreateAvailableEarningsTable = async () => {
+    try {
+      // Verificar se a tabela available_earnings existe
+      const { error } = await supabase.from("available_earnings").select("id").limit(1)
+
+      if (error && error.message.includes("does not exist")) {
+        // Criar a tabela available_earnings
+        await supabase.rpc("exec_sql", {
+          sql_query: `
+            CREATE TABLE IF NOT EXISTS public.available_earnings (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id UUID REFERENCES auth.users(id),
+              amount DECIMAL(15, 2) NOT NULL,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+              is_withdrawn BOOLEAN DEFAULT FALSE
+            );
+          `,
+        })
+        console.log("Tabela available_earnings criada com sucesso")
+      }
+    } catch (err) {
+      console.error("Erro ao verificar/criar tabela available_earnings:", err)
+    }
+  }
+
   const handlePayYields = async () => {
     if (rate < 1 || rate > 10) {
       toast({
@@ -68,6 +94,9 @@ export default function YieldsPage() {
     setProcessing(true)
 
     try {
+      // Verificar e criar a tabela available_earnings se necessário
+      await checkAndCreateAvailableEarningsTable()
+
       // Buscar apenas usuários com saldo disponível
       const { data: users, error: usersError } = await supabase
         .from("profiles")
@@ -93,6 +122,7 @@ export default function YieldsPage() {
       let successCount = 0
       let errorCount = 0
       let totalPaid = 0
+      const currentDate = new Date().toISOString()
 
       for (const user of users) {
         try {
@@ -106,8 +136,6 @@ export default function YieldsPage() {
             .from("profiles")
             .update({
               balance: user.balance + yieldAmount,
-              last_yield_date: new Date().toISOString(),
-              last_yield_rate: rate,
             })
             .eq("id", user.id)
 
@@ -115,6 +143,31 @@ export default function YieldsPage() {
             console.error("Erro ao atualizar saldo do usuário:", updateError)
             errorCount++
             continue
+          }
+
+          // Registrar o rendimento disponível para saque
+          const { error: availableEarningsError } = await supabase.from("available_earnings").insert({
+            user_id: user.id,
+            amount: yieldAmount,
+            is_withdrawn: false,
+          })
+
+          if (availableEarningsError) {
+            console.error("Erro ao registrar rendimento disponível:", availableEarningsError)
+          }
+
+          // Tentar atualizar as colunas de rendimento, mas não falhar se elas não existirem
+          try {
+            await supabase
+              .from("profiles")
+              .update({
+                last_yield_date: currentDate,
+                last_yield_rate: rate,
+              })
+              .eq("id", user.id)
+          } catch (columnError) {
+            console.warn("Aviso: Não foi possível atualizar colunas de rendimento:", columnError)
+            // Não interromper o processo se essas colunas não existirem
           }
 
           // Registrar transação de rendimento
@@ -131,19 +184,23 @@ export default function YieldsPage() {
             errorCount++
           } else {
             // Registrar também na tabela yields para manter consistência
-            const { error: yieldError } = await supabase
-              .from("yields")
-              .insert({
-                user_id: user.id,
-                amount: yieldAmount,
-                percentage: rate,
-                status: "completed",
-                paid_at: new Date().toISOString(),
-              })
-              .single()
+            try {
+              const { error: yieldError } = await supabase
+                .from("yields")
+                .insert({
+                  user_id: user.id,
+                  amount: yieldAmount,
+                  percentage: rate,
+                  status: "completed",
+                  paid_at: currentDate,
+                })
+                .single()
 
-            if (yieldError && !yieldError.message.includes("does not exist")) {
-              console.error("Erro ao registrar yield:", yieldError)
+              if (yieldError && !yieldError.message.includes("does not exist")) {
+                console.error("Erro ao registrar yield:", yieldError)
+              }
+            } catch (yieldTableError) {
+              console.warn("Aviso: Tabela yields pode não existir:", yieldTableError)
             }
 
             successCount++

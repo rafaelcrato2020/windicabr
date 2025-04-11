@@ -14,6 +14,7 @@ import {
   LogOut,
   Menu,
   X,
+  ArrowDownUp,
 } from "lucide-react"
 
 export default function AdminSidebar() {
@@ -77,6 +78,11 @@ export default function AdminSidebar() {
       title: "Afiliados",
       href: "/admin-panel/afiliados",
       icon: <UserPlus className="w-5 h-5" />,
+    },
+    {
+      href: "/admin-panel/afiliados/processar-comissoes",
+      title: "Processar Comissões",
+      icon: <ArrowDownUp className="w-5 h-5" />,
     },
     {
       title: "Configurações",

@@ -56,6 +56,7 @@ export default function SaquesPage() {
   const [userBalance, setUserBalance] = useState(0)
   const [commissionBalance, setCommissionBalance] = useState(0)
   const [earningsBalance, setEarningsBalance] = useState(0)
+  const [availableEarningsBalance, setAvailableEarningsBalance] = useState(0)
   const [withdrawableBalance, setWithdrawableBalance] = useState(0)
   const [withdrawablePrincipal, setWithdrawablePrincipal] = useState(0)
   const [investments, setInvestments] = useState<Investment[]>([])
@@ -64,6 +65,10 @@ export default function SaquesPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [withdrawals, setWithdrawals] = useState<any[]>([])
+  const [lastEarningsWithdrawal, setLastEarningsWithdrawal] = useState<Date | null>(null)
+  const [canWithdrawEarnings, setCanWithdrawEarnings] = useState(true)
+  const [lastEarningPayment, setLastEarningPayment] = useState<Date | null>(null)
+  const [waitingForNextPayment, setWaitingForNextPayment] = useState(false)
   const supabase = createBrowserClient()
   const { toast } = useToast()
 
@@ -146,6 +151,74 @@ export default function SaquesPage() {
     checkAndUpdateWithdrawalsTable()
   }, [supabase])
 
+  // Verificar se a tabela available_earnings existe
+  const checkAndCreateAvailableEarningsTable = async () => {
+    try {
+      // Verificar se a tabela available_earnings existe
+      const { error } = await supabase.from("available_earnings").select("id").limit(1)
+
+      if (error && error.message.includes("does not exist")) {
+        // Criar a tabela available_earnings
+        await supabase.rpc("exec_sql", {
+          sql_query: `
+            CREATE TABLE IF NOT EXISTS public.available_earnings (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id UUID REFERENCES auth.users(id),
+              amount DECIMAL(15, 2) NOT NULL,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+              is_withdrawn BOOLEAN DEFAULT FALSE
+            );
+          `,
+        })
+        console.log("Tabela available_earnings criada com sucesso")
+      }
+    } catch (err) {
+      console.error("Erro ao verificar/criar tabela available_earnings:", err)
+    }
+  }
+
+  // Função para verificar se o usuário pode sacar rendimentos
+  const checkEarningsWithdrawalEligibility = async (userId: string) => {
+    try {
+      // Verificar se a tabela available_earnings existe
+      await checkAndCreateAvailableEarningsTable()
+
+      // Buscar rendimentos disponíveis não sacados
+      const { data: availableEarnings, error: availableEarningsError } = await supabase
+        .from("available_earnings")
+        .select("amount")
+        .eq("user_id", userId)
+        .eq("is_withdrawn", false)
+
+      if (availableEarningsError) {
+        console.error("Erro ao buscar rendimentos disponíveis:", availableEarningsError)
+        return true // Em caso de erro, permitir o saque por padrão
+      }
+
+      // Calcular o total de rendimentos disponíveis para saque
+      const totalAvailableEarnings = availableEarnings
+        ? availableEarnings.reduce((sum, item) => sum + Number(item.amount), 0)
+        : 0
+
+      setAvailableEarningsBalance(totalAvailableEarnings)
+
+      // Se não houver rendimentos disponíveis, não permitir saque
+      if (totalAvailableEarnings <= 0) {
+        setCanWithdrawEarnings(false)
+        setWaitingForNextPayment(true)
+        return false
+      }
+
+      // Se houver rendimentos disponíveis, permitir o saque
+      setCanWithdrawEarnings(true)
+      setWaitingForNextPayment(false)
+      return true
+    } catch (err) {
+      console.error("Erro ao verificar elegibilidade para saque:", err)
+      return true // Em caso de erro, permitir o saque por padrão
+    }
+  }
+
   // Buscar dados do usuário, incluindo saldo, comissões, rendimentos e investimentos
   useEffect(() => {
     async function fetchUserData() {
@@ -163,6 +236,9 @@ export default function SaquesPage() {
           return
         }
 
+        // Verificar elegibilidade para saque de rendimentos
+        await checkEarningsWithdrawalEligibility(session.user.id)
+
         // Buscar o perfil do usuário com o saldo
         const { data: profileData, error: profileError } = await supabase
           .from("profiles")
@@ -175,7 +251,7 @@ export default function SaquesPage() {
         } else if (profileData) {
           setUserBalance(profileData.balance || 0)
 
-          // Buscar comissões de indicações e rendimentos de forma mais abrangente
+          // Buscar comissões de indicações
           const { data: commissionsData, error: commissionsError } = await supabase
             .from("transactions")
             .select("amount, type")
@@ -192,7 +268,7 @@ export default function SaquesPage() {
             setCommissionBalance(totalCommissions)
           }
 
-          // Buscar rendimentos incluindo yields
+          // Buscar rendimentos incluindo yields (apenas para exibição)
           const { data: earningsData, error: earningsError } = await supabase
             .from("transactions")
             .select("amount, type")
@@ -209,11 +285,8 @@ export default function SaquesPage() {
             setEarningsBalance(totalEarnings)
           }
 
-          // Calcular saldo disponível para saque (comissões + rendimentos)
-          const totalWithdrawable =
-            (commissionsData ? commissionsData.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) : 0) +
-            (earningsData ? earningsData.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) : 0)
-          setWithdrawableBalance(totalWithdrawable)
+          // Calcular saldo disponível para saque (comissões + rendimentos disponíveis)
+          setWithdrawableBalance(commissionBalance + availableEarningsBalance)
 
           // Buscar investimentos
           const { data: investmentsData, error: investmentsError } = await supabase
@@ -270,7 +343,7 @@ export default function SaquesPage() {
     }
 
     fetchUserData()
-  }, [supabase])
+  }, [supabase, commissionBalance, availableEarningsBalance])
 
   // Inicializa o valor formatado
   useEffect(() => {
@@ -296,6 +369,18 @@ export default function SaquesPage() {
   const handleWithdraw = () => {
     if (withdrawAmount < 2.2) {
       setShowMinimumAlert(true)
+      return
+    }
+
+    // Verificar se o usuário está tentando sacar rendimentos e se está bloqueado
+    if (selectedWithdrawalType === "earnings_commissions" && !canWithdrawEarnings) {
+      toast({
+        title: "Saque bloqueado",
+        description: waitingForNextPayment
+          ? "Você não tem rendimentos disponíveis para saque. Aguarde o próximo pagamento de rendimentos."
+          : "Não é possível sacar rendimentos no momento.",
+        variant: "destructive",
+      })
       return
     }
 
@@ -397,6 +482,19 @@ export default function SaquesPage() {
       return
     }
 
+    // Verificar novamente se o usuário pode sacar rendimentos
+    if (selectedWithdrawalType === "earnings_commissions" && !canWithdrawEarnings) {
+      toast({
+        title: "Saque bloqueado",
+        description: waitingForNextPayment
+          ? "Você não tem rendimentos disponíveis para saque. Aguarde o próximo pagamento de rendimentos."
+          : "Não é possível sacar rendimentos no momento.",
+        variant: "destructive",
+      })
+      setShowConfirmation(false)
+      return
+    }
+
     setSubmitting(true)
 
     try {
@@ -427,6 +525,36 @@ export default function SaquesPage() {
           throw new Error(
             "Saldo insuficiente para realizar este saque. Você só pode sacar comissões e rendimentos disponíveis.",
           )
+        }
+
+        // Marcar os rendimentos como sacados
+        let remainingAmount = withdrawAmount
+
+        // Primeiro, usar os rendimentos disponíveis
+        if (availableEarningsBalance > 0) {
+          const { data: availableEarnings, error: availableEarningsError } = await supabase
+            .from("available_earnings")
+            .select("id, amount")
+            .eq("user_id", session.user.id)
+            .eq("is_withdrawn", false)
+            .order("created_at", { ascending: true })
+
+          if (availableEarningsError) {
+            console.error("Erro ao buscar rendimentos disponíveis:", availableEarningsError)
+            throw new Error("Erro ao processar rendimentos disponíveis")
+          }
+
+          // Marcar rendimentos como sacados até atingir o valor do saque
+          for (const earning of availableEarnings) {
+            if (remainingAmount <= 0) break
+
+            const amountToWithdraw = Math.min(Number(earning.amount), remainingAmount)
+
+            // Marcar como sacado
+            await supabase.from("available_earnings").update({ is_withdrawn: true }).eq("id", earning.id)
+
+            remainingAmount -= amountToWithdraw
+          }
         }
 
         // Usar SQL direto para inserir o registro de saque
@@ -528,6 +656,13 @@ export default function SaquesPage() {
 
       if (selectedWithdrawalType === "earnings_commissions") {
         setWithdrawableBalance(withdrawableBalance - withdrawAmount)
+        setAvailableEarningsBalance(Math.max(0, availableEarningsBalance - withdrawAmount))
+
+        // Atualizar status de elegibilidade para saque de rendimentos
+        if (availableEarningsBalance - withdrawAmount <= 0) {
+          setCanWithdrawEarnings(false)
+          setWaitingForNextPayment(true)
+        }
       } else if (selectedWithdrawalType === "principal" && selectedInvestment) {
         // Atualizar a lista de investimentos
         setInvestments((prevInvestments) =>
@@ -638,10 +773,23 @@ export default function SaquesPage() {
                       <AlertCircle className="h-4 w-4" />
                       <AlertTitle>Informação</AlertTitle>
                       <AlertDescription>
-                        Você pode sacar comissões e rendimentos a qualquer momento. O valor principal investido só pode
-                        ser sacado quando o investimento render 100% do valor investido. Saque mínimo: $2,20 USDT.
+                        Você pode sacar apenas os rendimentos gerados e comissões recebidas. O valor principal investido
+                        só pode ser sacado quando o investimento render 100% do valor investido. Saque mínimo: $2,20
+                        USDT.
                       </AlertDescription>
                     </Alert>
+
+                    {!canWithdrawEarnings && (
+                      <Alert className="bg-red-500/10 border-red-900/50 text-red-500">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Saque bloqueado</AlertTitle>
+                        <AlertDescription>
+                          {waitingForNextPayment
+                            ? "Você não tem rendimentos disponíveis para saque. Aguarde o próximo pagamento de rendimentos."
+                            : "Não é possível sacar rendimentos no momento."}
+                        </AlertDescription>
+                      </Alert>
+                    )}
 
                     <div className="space-y-4">
                       <div className="space-y-2">
@@ -660,6 +808,11 @@ export default function SaquesPage() {
                               <div className="text-sm text-gray-400">
                                 Disponível: {formatCurrency(withdrawableBalance)}
                               </div>
+                              {!canWithdrawEarnings && waitingForNextPayment && (
+                                <div className="text-xs text-red-400 mt-1">
+                                  Aguardando próximo pagamento de rendimentos
+                                </div>
+                              )}
                             </Label>
                           </div>
                           <div
@@ -743,6 +896,7 @@ export default function SaquesPage() {
                               value={withdrawAmountFormatted}
                               onChange={handleWithdrawAmountChange}
                               className="bg-black/50 border-green-900/50 pl-8"
+                              disabled={selectedWithdrawalType === "earnings_commissions" && !canWithdrawEarnings}
                             />
                           </div>
                           <Button
@@ -761,6 +915,7 @@ export default function SaquesPage() {
                               }
                               setShowMinimumAlert(false)
                             }}
+                            disabled={selectedWithdrawalType === "earnings_commissions" && !canWithdrawEarnings}
                           >
                             Máx
                           </Button>
@@ -787,6 +942,7 @@ export default function SaquesPage() {
                           onChange={(e) => setWalletAddress(e.target.value)}
                           placeholder="Insira o endereço da sua carteira USDT"
                           className="bg-black/50 border-green-900/50"
+                          disabled={selectedWithdrawalType === "earnings_commissions" && !canWithdrawEarnings}
                         />
                       </div>
 
@@ -796,7 +952,8 @@ export default function SaquesPage() {
                           onClick={handleWithdraw}
                           disabled={
                             !walletAddress ||
-                            (selectedWithdrawalType === "earnings_commissions" && withdrawableBalance <= 0) ||
+                            (selectedWithdrawalType === "earnings_commissions" &&
+                              (!canWithdrawEarnings || withdrawableBalance <= 0)) ||
                             (selectedWithdrawalType === "principal" &&
                               (!selectedInvestment || withdrawablePrincipal <= 0))
                           }
@@ -891,10 +1048,15 @@ export default function SaquesPage() {
                         <p className="text-sm font-medium text-green-500">{formatCurrency(commissionBalance)}</p>
                       </div>
                       <div className="bg-black/30 p-2 rounded-md">
-                        <p className="text-xs text-gray-400">Rendimentos</p>
-                        <p className="text-sm font-medium text-green-500">{formatCurrency(earningsBalance)}</p>
+                        <p className="text-xs text-gray-400">Rendimentos Disponíveis</p>
+                        <p className="text-sm font-medium text-green-500">{formatCurrency(availableEarningsBalance)}</p>
                       </div>
                     </div>
+                    {!canWithdrawEarnings && waitingForNextPayment && (
+                      <div className="bg-red-500/10 border border-red-900/30 rounded-md p-2 mt-2">
+                        <p className="text-xs text-red-400">Aguardando próximo pagamento de rendimentos</p>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -912,6 +1074,7 @@ export default function SaquesPage() {
                       <p>• Rede suportada: TRC20</p>
                       <p>• Tempo de processamento: até 24h</p>
                       <p>• Taxa de saque: 0%</p>
+                      <p>• Rendimentos: Apenas o valor gerado</p>
                       <p>• Principal só pode ser sacado após 100% de rendimento</p>
                     </div>
                   </div>

@@ -38,6 +38,101 @@ export default function ApproveDeposit({ params }: { params: { id: string } }) {
     fetchDeposit()
   }, [params.id, router, supabase, toast])
 
+  const processReferralCommission = async (userId: string, depositAmount: number) => {
+    try {
+      // Verificar se o usuário foi indicado por alguém
+      const { data: userData, error: userError } = await supabase
+        .from("profiles")
+        .select("referred_by")
+        .eq("id", userId)
+        .single()
+
+      if (userError || !userData.referred_by) {
+        console.log("Usuário não possui indicador ou erro ao buscar:", userError)
+        return
+      }
+
+      // Buscar informações sobre a estrutura de níveis de indicação
+      const referrerId = userData.referred_by
+
+      // Processar comissão de nível 1 (10%)
+      const level1Commission = depositAmount * 0.1
+
+      // Atualizar saldo do indicador
+      const { data: referrerData, error: referrerError } = await supabase
+        .from("profiles")
+        .select("balance")
+        .eq("id", referrerId)
+        .single()
+
+      if (referrerError) {
+        console.error("Erro ao buscar dados do indicador:", referrerError)
+        return
+      }
+
+      const newReferrerBalance = (referrerData.balance || 0) + level1Commission
+
+      // Atualizar saldo do indicador
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ balance: newReferrerBalance })
+        .eq("id", referrerId)
+
+      if (updateError) {
+        console.error("Erro ao atualizar saldo do indicador:", updateError)
+        return
+      }
+
+      // Registrar a comissão como transação
+      await supabase.from("transactions").insert({
+        user_id: referrerId,
+        amount: level1Commission,
+        type: "referral_commission",
+        description: `Comissão de indicação (10%) - Depósito de R$ ${depositAmount.toFixed(2)}`,
+        status: "completed",
+      })
+
+      // Buscar indicador de nível 2 (se existir)
+      const { data: level2Data, error: level2Error } = await supabase
+        .from("profiles")
+        .select("referred_by")
+        .eq("id", referrerId)
+        .single()
+
+      if (!level2Error && level2Data.referred_by) {
+        // Processar comissão de nível 2 (5%)
+        const level2ReferrerId = level2Data.referred_by
+        const level2Commission = depositAmount * 0.05
+
+        // Atualizar saldo do indicador nível 2
+        const { data: level2ReferrerData, error: level2ReferrerError } = await supabase
+          .from("profiles")
+          .select("balance")
+          .eq("id", level2ReferrerId)
+          .single()
+
+        if (!level2ReferrerError) {
+          const newLevel2Balance = (level2ReferrerData.balance || 0) + level2Commission
+
+          await supabase.from("profiles").update({ balance: newLevel2Balance }).eq("id", level2ReferrerId)
+
+          // Registrar a comissão como transação
+          await supabase.from("transactions").insert({
+            user_id: level2ReferrerId,
+            amount: level2Commission,
+            type: "referral_commission",
+            description: `Comissão de indicação nível 2 (5%) - Depósito de R$ ${depositAmount.toFixed(2)}`,
+            status: "completed",
+          })
+        }
+      }
+
+      console.log("Comissões de indicação processadas com sucesso")
+    } catch (error) {
+      console.error("Erro ao processar comissões de indicação:", error)
+    }
+  }
+
   const handleApprove = async () => {
     setProcessing(true)
 
@@ -104,6 +199,9 @@ export default function ApproveDeposit({ params }: { params: { id: string } }) {
         variant: "default",
       })
     }
+
+    // 4. Processar comissões de indicação
+    await processReferralCommission(deposit.user_id, deposit.amount)
 
     toast({
       title: "Sucesso",

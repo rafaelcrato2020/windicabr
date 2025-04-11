@@ -139,7 +139,7 @@ export default function YieldsPage() {
 
       toast({
         title: "Rendimentos Pagos",
-        description: `Rendimentos pagos com sucesso para ${successCount} usuários com saldo. Total: R$ ${totalPaid.toFixed(2)}. Falhas: ${errorCount}`,
+        description: `Rendimentos pagos com sucesso para ${successCount} usuários com saldo. Total: $ ${totalPaid.toFixed(2)}. Falhas: ${errorCount}`,
         variant: "default",
       })
     } catch (error) {

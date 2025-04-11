@@ -157,11 +157,11 @@ export default function UserTransactionsPage({ params }: { params: { id: string 
           <div className="flex gap-4">
             <div className="bg-green-500/10 border border-green-900/50 rounded-lg p-3">
               <p className="text-xs text-gray-400">Saldo</p>
-              <p className="text-lg font-bold text-green-400">R$ {(user.balance || 0).toFixed(2)}</p>
+              <p className="text-lg font-bold text-green-400">$ {(user.balance || 0).toFixed(2)}</p>
             </div>
             <div className="bg-yellow-500/10 border border-yellow-900/50 rounded-lg p-3">
               <p className="text-xs text-gray-400">Investimentos</p>
-              <p className="text-lg font-bold text-yellow-400">R$ {(user.investments || 0).toFixed(2)}</p>
+              <p className="text-lg font-bold text-yellow-400">$ {(user.investments || 0).toFixed(2)}</p>
             </div>
           </div>
         </div>
@@ -193,7 +193,7 @@ export default function UserTransactionsPage({ params }: { params: { id: string 
                         </div>
                       </td>
                       <td className={`px-4 py-3 font-medium ${getTransactionColor(transaction.type)}`}>
-                        R$ {transaction.amount.toFixed(2)}
+                        $ {transaction.amount.toFixed(2)}
                       </td>
                       <td className="px-4 py-3">
                         <span

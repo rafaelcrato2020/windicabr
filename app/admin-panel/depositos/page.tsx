@@ -211,7 +211,7 @@ export default function DepositsPage() {
                       <span className="text-xs text-gray-400">{deposit.user_email || "Email não disponível"}</span>
                     </td>
                     <td className="px-6 py-4 font-medium text-green-400">
-                      R$ {typeof deposit.amount === "number" ? deposit.amount.toFixed(2) : "0.00"}
+                      $ {typeof deposit.amount === "number" ? deposit.amount.toFixed(2) : "0.00"}
                     </td>
                     <td className="px-6 py-4">{deposit.payment_method || "Pix"}</td>
                     <td className="px-6 py-4">

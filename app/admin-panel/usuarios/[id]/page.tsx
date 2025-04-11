@@ -106,11 +106,11 @@ export default function UserDetailsPage({ params }: { params: { id: string } }) 
           </div>
           <div>
             <p className="text-gray-400 text-sm">Saldo</p>
-            <p className="font-medium text-green-400">R$ {(user.balance || 0).toFixed(2)}</p>
+            <p className="font-medium text-green-400">$ {(user.balance || 0).toFixed(2)}</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm">Investimentos</p>
-            <p className="font-medium text-yellow-400">R$ {(user.investments || 0).toFixed(2)}</p>
+            <p className="font-medium text-yellow-400">$ {(user.investments || 0).toFixed(2)}</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm">Data de Cadastro</p>

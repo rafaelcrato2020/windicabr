@@ -161,8 +161,8 @@ export default function UsersPage() {
                   <tr key={user.id} className="hover:bg-gray-700">
                     <td className="px-6 py-4">{user.name || "Usuário"}</td>
                     <td className="px-6 py-4">{user.email}</td>
-                    <td className="px-6 py-4 font-medium">R$ {(user.balance || 0).toFixed(2)}</td>
-                    <td className="px-6 py-4 font-medium">R$ {(user.investments || 0).toFixed(2)}</td>
+                    <td className="px-6 py-4 font-medium">$ {(user.balance || 0).toFixed(2)}</td>
+                    <td className="px-6 py-4 font-medium">$ {(user.investments || 0).toFixed(2)}</td>
                     <td className="px-6 py-4">
                       <span
                         className={`px-2 py-1 rounded-full text-xs ${

@@ -2,11 +2,11 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { CreditCard, DollarSign, Home, LogOut, Menu, Settings, Users, Wallet, X, Zap } from "lucide-react"
+import { BarChart2, CreditCard, DollarSign, Home, LogOut, Menu, Settings, Users, Wallet, X, Zap } from "lucide-react"
 import { Toaster } from "@/components/toaster"
 import { UserProvider, useUser } from "@/contexts/user-context"
 import { useMobile } from "@/hooks/use-mobile"
@@ -25,6 +25,102 @@ interface UserData {
 
 interface DashboardLayoutProps {
   children: React.ReactNode
+}
+
+function MyInvestmentsButton({ href, isActive, onClick }: { href: string; isActive: boolean; onClick?: () => void }) {
+  const supabase = createBrowserClient()
+  const [totalInvested, setTotalInvested] = useState(0)
+  const [activeInvestments, setActiveInvestments] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  const fetchInvestmentData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) return
+
+      // Buscar investimentos ativos
+      const { data, error } = await supabase
+        .from("investments")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .eq("status", "active")
+
+      if (error) {
+        console.error("Erro ao buscar investimentos:", error)
+        return
+      }
+
+      // Calcular total investido
+      let total = 0
+      data?.forEach((inv) => {
+        total += Number(inv.amount)
+      })
+
+      setTotalInvested(total)
+      setActiveInvestments(data?.length || 0)
+    } catch (err) {
+      console.error("Erro ao buscar dados de investimentos:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [supabase])
+
+  useEffect(() => {
+    fetchInvestmentData()
+
+    // Configurar um intervalo para atualizar os dados a cada 5 minutos
+    const interval = setInterval(fetchInvestmentData, 5 * 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [fetchInvestmentData])
+
+  // Função para formatar números com separadores
+  function formatCurrency(value: number): string {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value)
+  }
+
+  return (
+    <Link
+      href={href}
+      className={`flex flex-col gap-1 rounded-lg px-3 py-3 transition-all ${
+        isActive ? "bg-blue-900/20 text-blue-500" : "text-gray-400 hover:bg-blue-900/10 hover:text-blue-500"
+      }`}
+      onClick={onClick}
+    >
+      <div className="flex items-center gap-3">
+        <BarChart2 className={`h-5 w-5 ${isActive ? "text-blue-500" : ""}`} />
+        <span>Meus Investimentos</span>
+      </div>
+
+      {loading ? (
+        <div className="ml-8 text-xs text-gray-500">Carregando...</div>
+      ) : (
+        <div className="ml-8 space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Total:</span>
+            <span className={`text-xs font-medium ${isActive ? "text-blue-400" : "text-gray-400"}`}>
+              {formatCurrency(totalInvested)}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Ativos:</span>
+            <span className={`text-xs font-medium ${isActive ? "text-blue-400" : "text-gray-400"}`}>
+              {activeInvestments}
+            </span>
+          </div>
+        </div>
+      )}
+    </Link>
+  )
 }
 
 function SidebarContent({ onItemClick }: { onItemClick?: () => void }) {
@@ -81,9 +177,9 @@ function SidebarContent({ onItemClick }: { onItemClick?: () => void }) {
   return (
     <div className="flex flex-col h-full">
       {/* User Profile */}
-      <div className="flex flex-col items-center py-4 px-4 border-b border-green-900/30">
+      <div className="flex flex-col items-center py-4 px-4 border-b border-blue-900/30">
         <div className="relative w-16 h-16 mb-2">
-          <div className="absolute inset-0 rounded-full bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 animate-pulse-glow"></div>
+          <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500 via-blue-400 to-blue-600 animate-pulse-glow"></div>
           <div className="absolute inset-0.5 rounded-full overflow-hidden">
             <Image
               src={profilePhoto || "/placeholder.svg?height=64&width=64"}
@@ -111,19 +207,51 @@ function SidebarContent({ onItemClick }: { onItemClick?: () => void }) {
         </div>
       </div>
 
-      <div className="flex h-16 items-center justify-between px-4 border-b border-green-900/30">
+      <div className="flex h-16 items-center justify-between px-4 border-b border-blue-900/30">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <Zap className="h-6 w-6 text-yellow-500" />
-          <span className="text-xl font-bold bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 text-transparent bg-clip-text">
+          <Zap className="h-6 w-6 text-blue-500" />
+          <span className="text-xl font-bold bg-gradient-to-r from-blue-500 via-blue-400 to-blue-600 text-transparent bg-clip-text">
             WINDICABR
           </span>
         </Link>
       </div>
       <div className="flex-1 overflow-auto py-4">
         <nav className="grid gap-1 px-2">
+          <Link
+            href="/dashboard"
+            className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${
+              pathname === "/dashboard"
+                ? "bg-blue-900/20 text-blue-500"
+                : "text-gray-400 hover:bg-blue-900/10 hover:text-blue-500"
+            }`}
+            onClick={onItemClick}
+          >
+            <Home className={`h-5 w-5 ${pathname === "/dashboard" ? "text-blue-500" : ""}`} />
+            <span>Início</span>
+          </Link>
+
+          {/* Botão original de Investimentos */}
+          <Link
+            href="/dashboard/investimentos"
+            className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${
+              pathname === "/dashboard/investimentos"
+                ? "bg-blue-900/20 text-blue-500"
+                : "text-gray-400 hover:bg-blue-900/10 hover:text-blue-500"
+            }`}
+            onClick={onItemClick}
+          >
+            <DollarSign className={`h-5 w-5 ${pathname === "/dashboard/investimentos" ? "text-blue-500" : ""}`} />
+            <span>Investimentos</span>
+          </Link>
+
+          {/* Novo botão de Meus Investimentos */}
+          <MyInvestmentsButton
+            href="/dashboard/meus-investimentos"
+            isActive={pathname === "/dashboard/meus-investimentos"}
+            onClick={onItemClick}
+          />
+
           {[
-            { name: "Início", href: "/dashboard", icon: Home },
-            { name: "Investimentos", href: "/dashboard/investimentos", icon: DollarSign },
             { name: "Saques", href: "/dashboard/saques", icon: Wallet },
             { name: "Transações", href: "/dashboard/transacoes", icon: CreditCard },
             { name: "Programa de Afiliados", href: "/dashboard/afiliados", icon: Users },
@@ -135,20 +263,18 @@ function SidebarContent({ onItemClick }: { onItemClick?: () => void }) {
                 key={item.name}
                 href={item.href}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${
-                  isActive
-                    ? "bg-green-900/20 text-green-500"
-                    : "text-gray-400 hover:bg-green-900/10 hover:text-green-500"
+                  isActive ? "bg-blue-900/20 text-blue-500" : "text-gray-400 hover:bg-blue-900/10 hover:text-blue-500"
                 }`}
                 onClick={onItemClick}
               >
-                <item.icon className={`h-5 w-5 ${isActive ? "text-green-500" : ""}`} />
+                <item.icon className={`h-5 w-5 ${isActive ? "text-blue-500" : ""}`} />
                 <span>{item.name}</span>
               </Link>
             )
           })}
         </nav>
       </div>
-      <div className="border-t border-green-900/30 p-4">
+      <div className="border-t border-blue-900/30 p-4">
         <Link
           href="/login"
           className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-400 hover:bg-red-900/10 hover:text-red-500 transition-all"
@@ -167,17 +293,17 @@ function MobileHeader() {
   const [isOpen, setIsOpen] = useState(false)
 
   return (
-    <header className="sticky top-0 z-40 md:hidden flex items-center justify-between h-16 px-4 border-b border-green-900/30 bg-black/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 md:hidden flex items-center justify-between h-16 px-4 border-b border-blue-900/30 bg-black/80 backdrop-blur-xl">
       <div className="flex items-center gap-2">
-        <Zap className="h-6 w-6 text-yellow-500" />
-        <span className="text-xl font-bold bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 text-transparent bg-clip-text">
+        <Zap className="h-6 w-6 text-blue-500" />
+        <span className="text-xl font-bold bg-gradient-to-r from-blue-500 via-blue-400 to-blue-600 text-transparent bg-clip-text">
           WINDICABR
         </span>
       </div>
 
       <div className="flex items-center gap-3">
         <div className="relative w-8 h-8">
-          <div className="absolute inset-0 rounded-full bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 animate-pulse-glow"></div>
+          <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500 via-blue-400 to-blue-600 animate-pulse-glow"></div>
           <div className="absolute inset-0.5 rounded-full overflow-hidden">
             <Image
               src={profilePhoto || "/placeholder.svg?height=32&width=32"}
@@ -191,11 +317,11 @@ function MobileHeader() {
 
         <Sheet>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="text-gray-400 hover:bg-green-900/20 hover:text-green-500">
+            <Button variant="ghost" size="icon" className="text-gray-400 hover:bg-blue-900/20 hover:text-blue-500">
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="p-0 bg-black border-green-900/30 w-[280px] sm:w-[320px]">
+          <SheetContent side="left" className="p-0 bg-black border-blue-900/30 w-[280px] sm:w-[320px]">
             <div className="absolute right-4 top-4 z-50">
               <Button variant="ghost" size="icon" className="text-gray-400 hover:bg-red-900/20 hover:text-red-500">
                 <X className="h-5 w-5" />
@@ -225,7 +351,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {!isMobile && sidebarHidden && (
           <button
             onClick={() => setSidebarHidden(false)}
-            className="fixed top-4 left-4 z-50 rounded-full p-2 bg-green-900/20 text-green-500 hover:bg-green-900/30 transition-all"
+            className="fixed top-4 left-4 z-50 rounded-full p-2 bg-blue-900/20 text-blue-500 hover:bg-blue-900/30 transition-all"
             aria-label="Mostrar barra lateral"
           >
             <svg
@@ -247,14 +373,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Sidebar para desktop */}
         {!isMobile && (
           <aside
-            className={`fixed inset-y-0 left-0 z-40 flex flex-col border-r border-green-900/30 bg-black/80 backdrop-blur-xl transition-all duration-300 ${
+            className={`fixed inset-y-0 left-0 z-40 flex flex-col border-r border-blue-900/30 bg-black/80 backdrop-blur-xl transition-all duration-300 ${
               sidebarHidden ? "-translate-x-full" : "translate-x-0"
             } w-64`}
           >
             <div className="flex justify-end p-2">
               <button
                 onClick={() => setSidebarHidden(true)}
-                className="rounded-md p-1.5 text-gray-400 hover:bg-green-900/20 hover:text-green-500"
+                className="rounded-md p-1.5 text-gray-400 hover:bg-blue-900/20 hover:text-blue-500"
                 aria-label="Esconder barra lateral"
               >
                 <svg

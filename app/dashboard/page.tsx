@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { useMobile } from "@/hooks/use-mobile"
+import { MyInvestments } from "@/components/dashboard/my-investments"
 
 // Importações
 import { useEffect, useState } from "react"
@@ -46,22 +47,22 @@ function BalanceCard({
   icon: any
   trend: "up" | "down" | "neutral"
   trendValue: string
-  color: "green" | "yellow" | "red"
+  color: "blue" | "cyan" | "red"
 }) {
   const colorClasses = {
-    green: {
-      bg: "bg-green-500/10",
-      border: "border-green-900/50",
-      text: "text-green-500",
-      icon: "text-green-500",
-      glow: "before:bg-green-500/20",
+    blue: {
+      bg: "bg-blue-500/10",
+      border: "border-blue-900/50",
+      text: "text-blue-400",
+      icon: "text-blue-400",
+      glow: "before:bg-blue-500/20",
     },
-    yellow: {
-      bg: "bg-yellow-500/10",
-      border: "border-yellow-900/50",
-      text: "text-yellow-500",
-      icon: "text-yellow-500",
-      glow: "before:bg-yellow-500/20",
+    cyan: {
+      bg: "bg-cyan-500/10",
+      border: "border-cyan-900/50",
+      text: "text-cyan-400",
+      icon: "text-cyan-400",
+      glow: "before:bg-cyan-500/20",
     },
     red: {
       bg: "bg-red-500/10",
@@ -73,13 +74,13 @@ function BalanceCard({
   }
 
   const trendIcons = {
-    up: <ArrowUp className="h-4 w-4 text-green-500" />,
+    up: <ArrowUp className="h-4 w-4 text-blue-400" />,
     down: <ArrowDown className="h-4 w-4 text-red-500" />,
     neutral: null,
   }
 
   const trendColors = {
-    up: "text-green-500",
+    up: "text-blue-400",
     down: "text-red-500",
     neutral: "text-gray-400",
   }
@@ -298,7 +299,7 @@ export default function DashboardPage() {
   // Resto do código permanece o mesmo...
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-40 border-b border-green-900/30 bg-black/80 backdrop-blur-xl md:flex hidden">
+      <header className="sticky top-0 z-40 border-b border-blue-900/30 bg-black/80 backdrop-blur-xl md:flex hidden">
         <div className="container flex h-16 items-center justify-between py-4">
           <h1 className="text-xl font-bold">Painel de Controle</h1>
           <div className="flex items-center gap-4">
@@ -327,7 +328,7 @@ export default function DashboardPage() {
                 icon={Wallet}
                 trend={getTrend(financialData.balance)}
                 trendValue={financialData.balance > 0 ? "+100%" : "0%"}
-                color="green"
+                color="blue"
               />
               <BalanceCard
                 title="Saldo Investido"
@@ -335,7 +336,7 @@ export default function DashboardPage() {
                 icon={DollarSign}
                 trend={getTrend(financialData.investedBalance)}
                 trendValue={financialData.investedBalance > 0 ? "+100%" : "0%"}
-                color="yellow"
+                color="cyan"
               />
               <BalanceCard
                 title="Rendimento Diário"
@@ -343,12 +344,12 @@ export default function DashboardPage() {
                 icon={TrendingUp}
                 trend={getTrend(financialData.dailyEarnings)}
                 trendValue={financialData.dailyEarnings > 0 ? "+100%" : "0%"}
-                color="green"
+                color="blue"
               />
             </div>
 
             {/* Gráfico */}
-            <Card className="bg-black/40 border-green-900/50">
+            <Card className="bg-black/40 border-blue-900/50">
               <CardContent className="p-3 md:p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-2">
                   <h2 className="text-base font-semibold text-white">Desempenho do Investimento</h2>
@@ -425,14 +426,17 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
+            {/* Componente de Meus Investimentos */}
+            <MyInvestments />
+
             {/* Últimas transações */}
-            <Card className="bg-black/40 border-green-900/50">
+            <Card className="bg-black/40 border-blue-900/50">
               <CardContent className="p-3 md:p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-2">
                   <h2 className="text-base font-semibold text-white">Últimas Transações</h2>
                   <a
                     href="/dashboard/transacoes"
-                    className="text-green-500 hover:text-green-400 text-xs font-medium transition-colors"
+                    className="text-blue-400 hover:text-blue-300 text-xs font-medium transition-colors"
                   >
                     Ver Todas
                   </a>
@@ -462,28 +466,28 @@ export default function DashboardPage() {
                 icon={Users}
                 trend={getTrend(financialData.totalCommissions)}
                 trendValue={financialData.totalCommissions > 0 ? "+100%" : "0%"}
-                color="green"
+                color="blue"
               />
             </div>
 
             {/* Card de resumo */}
-            <Card className="bg-black/40 border-green-900/50">
+            <Card className="bg-black/40 border-blue-900/50">
               <CardContent className="p-3 md:p-4">
                 <h2 className="text-base font-semibold text-white mb-3">Resumo Financeiro</h2>
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center border-b border-green-900/30 pb-2">
+                  <div className="flex justify-between items-center border-b border-blue-900/30 pb-2">
                     <span className="text-sm text-gray-400">Investimento Total</span>
-                    <span className="text-sm font-medium text-yellow-500">
+                    <span className="text-sm font-medium text-cyan-400">
                       {formatCurrency(financialData.totalInvestment)}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center border-b border-green-900/30 pb-2">
+                  <div className="flex justify-between items-center border-b border-blue-900/30 pb-2">
                     <span className="text-sm text-gray-400">Rendimento Total</span>
-                    <span className="text-sm font-medium text-green-500">
+                    <span className="text-sm font-medium text-blue-400">
                       {formatCurrency(financialData.totalEarnings)}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center border-b border-green-900/30 pb-2">
+                  <div className="flex justify-between items-center border-b border-blue-900/30 pb-2">
                     <span className="text-sm text-gray-400">Saques Realizados</span>
                     <span className="text-sm font-medium text-red-500">
                       {formatCurrency(financialData.totalWithdrawals)}
@@ -491,7 +495,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-400">Comissões Recebidas</span>
-                    <span className="text-sm font-medium text-green-500">
+                    <span className="text-sm font-medium text-blue-400">
                       {formatCurrency(financialData.totalCommissions)}
                     </span>
                   </div>

@@ -4,34 +4,28 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ArrowLeft, Zap } from "lucide-react"
+import { ArrowLeft, Zap, Loader2, Eye, EyeOff } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-
-// Adicione estas importações no topo do arquivo
-import { useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@/utils/supabase/client"
 
 export default function CadastroPage() {
   const router = useRouter()
   const { toast } = useToast()
-
-  // Adicione estas linhas logo após a declaração do componente CadastroPage
   const searchParams = useSearchParams()
   const refCode = searchParams.get("ref")
+
   const [supabase, setSupabase] = useState<any>(null)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
-  useEffect(() => {
-    // Inicializar o cliente Supabase após a montagem do componente
-    const client = createBrowserClient()
-    setSupabase(client)
-  }, [])
-
-  // Modifique o estado formData para incluir o código de referência
+  // Estado do formulário
   const [formData, setFormData] = useState({
     nome: "",
     email: "",
@@ -39,10 +33,19 @@ export default function CadastroPage() {
     senha: "",
     confirmarSenha: "",
     termos: false,
-    referralCode: refCode || "", // Adicione o código de referência aqui
+    referralCode: refCode || "",
   })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
+
+  useEffect(() => {
+    // Inicializar o cliente Supabase após a montagem do componente
+    const client = createBrowserClient()
+    setSupabase(client)
+
+    // Atualizar o código de referência se mudar na URL
+    if (refCode) {
+      setFormData((prev) => ({ ...prev, referralCode: refCode }))
+    }
+  }, [refCode])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -53,7 +56,6 @@ export default function CadastroPage() {
     setFormData((prev) => ({ ...prev, termos: checked }))
   }
 
-  // Modifique a função handleSubmit para processar o código de referência
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -113,14 +115,13 @@ export default function CadastroPage() {
 
       if (authData.user) {
         // Gerar código de referência único baseado no ID do usuário
-        const referralCode = authData.user.id.substring(0, 8)
+        const referralCode = generateReferralCode(authData.user.id)
 
         // Criar o perfil do usuário
         const { error: profileError } = await supabase.from("profiles").insert({
           id: authData.user.id,
           name: formData.nome,
           email: formData.email,
-          referred_by: formData.referralCode,
           referral_code: referralCode,
         })
 
@@ -136,7 +137,8 @@ export default function CadastroPage() {
         // Processar código de referência se existir
         if (formData.referralCode) {
           try {
-            await fetch("/api/process-referral", {
+            console.log("Processando referência:", formData.referralCode)
+            const response = await fetch("/api/process-referral", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -146,6 +148,19 @@ export default function CadastroPage() {
                 referralCode: formData.referralCode,
               }),
             })
+
+            const referralResult = await response.json()
+
+            if (!response.ok) {
+              console.error("Erro ao processar referência:", referralResult)
+              toast({
+                title: "Aviso",
+                description: "Conta criada, mas houve um problema ao processar a referência.",
+                variant: "default",
+              })
+            } else {
+              console.log("Referência processada com sucesso:", referralResult)
+            }
           } catch (refError) {
             console.error("Erro ao processar referência:", refError)
           }
@@ -153,28 +168,13 @@ export default function CadastroPage() {
 
         toast({
           title: "Cadastro realizado com sucesso!",
-          description: "Sua conta foi criada. Redirecionando para o dashboard...",
+          description: "Sua conta foi criada. Redirecionando para o login...",
           variant: "default",
         })
 
-        // Fazer login com o novo usuário para garantir a sessão correta
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: formData.email,
-          password: formData.senha,
-        })
-
-        if (signInError) {
-          console.error("Erro ao fazer login automático:", signInError)
-          // Redirecionar para a página de login mesmo com erro
-          setTimeout(() => {
-            router.push("/login")
-          }, 2000)
-          return
-        }
-
-        // Redirecionar para o dashboard após o cadastro
+        // Redirecionar para a página de login após o cadastro
         setTimeout(() => {
-          router.push("/dashboard")
+          router.push("/login")
         }, 2000)
       }
     } catch (error: any) {
@@ -188,6 +188,13 @@ export default function CadastroPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Função para gerar código de referência único
+  const generateReferralCode = (userId: string): string => {
+    const timestamp = new Date().getTime().toString(36).slice(-4)
+    const userIdPart = userId.replace(/-/g, "").slice(0, 6)
+    return `${userIdPart}${timestamp}`.toUpperCase()
   }
 
   return (
@@ -236,6 +243,14 @@ export default function CadastroPage() {
                   Cadastre-se na WINDICABR
                 </h1>
                 <p className="text-gray-400 mt-2">Crie sua conta e comece a investir nos maiores mercados do mundo</p>
+
+                {formData.referralCode && (
+                  <div className="mt-2 p-2 bg-green-500/10 border border-green-500/20 rounded-md">
+                    <p className="text-green-500 text-sm">
+                      Você foi convidado por um afiliado! Código: {formData.referralCode}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {error && (
@@ -297,13 +312,20 @@ export default function CadastroPage() {
                     <Input
                       id="senha"
                       name="senha"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       placeholder="Crie uma senha forte"
                       value={formData.senha}
                       onChange={handleChange}
                       required
-                      className="bg-black/50 border-green-900/50 focus:border-green-500 focus:ring-green-500/20"
+                      className="bg-black/50 border-green-900/50 focus:border-green-500 focus:ring-green-500/20 pr-10"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
                   </div>
                 </div>
 
@@ -313,13 +335,20 @@ export default function CadastroPage() {
                     <Input
                       id="confirmarSenha"
                       name="confirmarSenha"
-                      type="password"
+                      type={showConfirmPassword ? "text" : "password"}
                       placeholder="Confirme sua senha"
                       value={formData.confirmarSenha}
                       onChange={handleChange}
                       required
-                      className="bg-black/50 border-green-900/50 focus:border-green-500 focus:ring-green-500/20"
+                      className="bg-black/50 border-green-900/50 focus:border-green-500 focus:ring-green-500/20 pr-10"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                    >
+                      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
                   </div>
                 </div>
 
@@ -350,7 +379,13 @@ export default function CadastroPage() {
                   disabled={loading || !formData.termos}
                   className="w-full bg-gradient-to-r from-green-600 to-yellow-500 hover:from-green-700 hover:to-yellow-600 text-black font-bold"
                 >
-                  {loading ? "Processando..." : "Criar minha conta"}
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando...
+                    </>
+                  ) : (
+                    "Criar minha conta"
+                  )}
                 </Button>
               </form>
 

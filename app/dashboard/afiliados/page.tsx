@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { Copy, LinkIcon, Share2, Check } from "lucide-react"
+import { Copy, LinkIcon, Share2, Check, Users, RefreshCw, Loader2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,13 +16,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-
-// Vamos modificar a parte que exibe o saldo disponível para buscar os dados atualizados do banco de dados
-
-// Adicione estas importações no topo do arquivo, após as importações existentes
+import { useToast } from "@/hooks/use-toast"
 import { createBrowserClient } from "@/utils/supabase/client"
 
-// Modifique a função formatCurrency para garantir o formato brasileiro
+// Função para formatar moeda
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -32,7 +29,7 @@ function formatCurrency(value: number): string {
   }).format(value)
 }
 
-// Adicione uma função para formatar números sem o símbolo de moeda
+// Função para formatar números
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
     minimumFractionDigits: 2,
@@ -51,7 +48,7 @@ function AffiliateCard({
   level: number
   percentage: number
   count: number
-  earnings: string
+  earnings: number
   color: "green" | "yellow" | "red" | "purple"
 }) {
   const colorClasses = {
@@ -98,7 +95,7 @@ function AffiliateCard({
           </div>
           <div className="flex justify-between">
             <span className="text-sm text-gray-400">Ganhos</span>
-            <span className={`text-sm font-medium ${classes.text}`}>{earnings}</span>
+            <span className={`text-sm font-medium ${classes.text}`}>${earnings.toFixed(2)}</span>
           </div>
         </div>
       </CardContent>
@@ -106,22 +103,51 @@ function AffiliateCard({
   )
 }
 
+// Interface para os dados de afiliados
+interface Affiliate {
+  id: string
+  name?: string
+  email?: string
+  created_at: string
+  level: number
+}
+
 export default function AfiliadosPage() {
-  const [activeTab, setActiveTab] = useState("overview")
+  const [activeTab, setActiveTab] = useState("level1")
   const [showCalculator, setShowCalculator] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [userBalance, setUserBalance] = useState(0)
   const [loading, setLoading] = useState(true)
-  const supabase = createBrowserClient()
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
+  const supabase = createBrowserClient()
 
-  // Verificar se o cliente Supabase está disponível
-  useEffect(() => {
-    if (!supabase) {
-      setError("Erro de conexão com o banco de dados. Por favor, tente novamente mais tarde.")
-      setLoading(false)
-    }
-  }, [supabase])
+  // Estados para dados de afiliados
+  const [referralLink, setReferralLink] = useState("Carregando...")
+  const [referralCode, setReferralCode] = useState("")
+  const [affiliates, setAffiliates] = useState<{
+    level1: Affiliate[]
+    level2: Affiliate[]
+    level3: Affiliate[]
+    level4: Affiliate[]
+  }>({
+    level1: [],
+    level2: [],
+    level3: [],
+    level4: [],
+  })
+  const [affiliateStats, setAffiliateStats] = useState({
+    level1Count: 0,
+    level2Count: 0,
+    level3Count: 0,
+    level4Count: 0,
+    level1Earnings: 0,
+    level2Earnings: 0,
+    level3Earnings: 0,
+    level4Earnings: 0,
+    totalAffiliates: 0,
+    totalEarnings: 0,
+  })
 
   // Estados para a calculadora
   const [level1Count, setLevel1Count] = useState(0)
@@ -133,83 +159,211 @@ export default function AfiliadosPage() {
   const [level4Count, setLevel4Count] = useState(0)
   const [level4Amount, setLevel4Amount] = useState(0)
 
-  // Modifique a parte que define o referralLink para buscar o código de referência real do usuário
-  // Substitua esta linha:
-  //const referralLink = "https://windicabr.com/ref/usuario123"
-
-  // Por este código que busca o código de referência do usuário:
-  const [referralLink, setReferralLink] = useState("Carregando...")
-  const [referralCode, setReferralCode] = useState("")
-
-  // Adicione este useEffect para buscar o código de referência do usuário
+  // Verificar se o cliente Supabase está disponível
   useEffect(() => {
-    async function fetchReferralCode() {
-      try {
-        if (!supabase) {
-          console.error("Cliente Supabase não disponível")
-          return
-        }
-        // Obter a sessão atual
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-
-        if (!session) {
-          console.error("Usuário não autenticado")
-          return
-        }
-
-        // Verificar se o usuário já tem um código de referência
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("referral_code")
-          .eq("id", session.user.id)
-          .single()
-
-        if (error) {
-          console.error("Erro ao buscar código de referência:", error)
-          return
-        }
-
-        // Se o usuário não tiver um código de referência, gerar um novo
-        if (!data.referral_code) {
-          // Gerar um código de referência único baseado no ID do usuário
-          const newReferralCode = session.user.id.substring(0, 8)
-
-          // Atualizar o perfil do usuário com o novo código
-          const { error: updateError } = await supabase
-            .from("profiles")
-            .update({ referral_code: newReferralCode })
-            .eq("id", session.user.id)
-
-          if (updateError) {
-            console.error("Erro ao atualizar código de referência:", updateError)
-            return
-          }
-
-          setReferralCode(newReferralCode)
-          setReferralLink(`${window.location.origin}/cadastro?ref=${newReferralCode}`)
-        } else {
-          setReferralCode(data.referral_code)
-          setReferralLink(`${window.location.origin}/cadastro?ref=${data.referral_code}`)
-        }
-      } catch (err) {
-        console.error("Erro ao processar código de referência:", err)
-      }
-    }
-
-    if (supabase) {
-      fetchReferralCode()
+    if (!supabase) {
+      setError("Erro de conexão com o banco de dados. Por favor, tente novamente mais tarde.")
+      setLoading(false)
+    } else {
+      fetchUserData()
     }
   }, [supabase])
 
+  // Função para buscar dados do usuário e afiliados
+  const fetchUserData = async () => {
+    if (refreshing) return
+
+    setLoading(true)
+    setRefreshing(true)
+
+    try {
+      if (!supabase) {
+        throw new Error("Cliente Supabase não disponível")
+      }
+
+      // Obter a sessão atual
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
+        throw new Error("Usuário não autenticado")
+      }
+
+      const userId = session.user.id
+
+      // 1. Buscar ou gerar código de referência
+      await fetchReferralCode(userId)
+
+      // 2. Buscar afiliados de nível 1 (referidos diretamente)
+      const { data: level1Data, error: level1Error } = await supabase
+        .from("profiles")
+        .select("id, name, email, created_at")
+        .eq("referred_by", userId)
+
+      if (level1Error) {
+        console.error("Erro ao buscar afiliados nível 1:", level1Error)
+      }
+
+      const level1Affiliates = level1Data || []
+
+      // 3. Buscar afiliados de nível 2 (referidos pelos afiliados de nível 1)
+      let level2Affiliates: Affiliate[] = []
+      if (level1Affiliates.length > 0) {
+        const level1Ids = level1Affiliates.map((a) => a.id)
+        const { data: level2Data, error: level2Error } = await supabase
+          .from("profiles")
+          .select("id, name, email, created_at")
+          .in("referred_by", level1Ids)
+
+        if (level2Error) {
+          console.error("Erro ao buscar afiliados nível 2:", level2Error)
+        } else {
+          level2Affiliates = (level2Data || []).map((a) => ({ ...a, level: 2 }))
+        }
+      }
+
+      // 4. Buscar afiliados de nível 3 (referidos pelos afiliados de nível 2)
+      let level3Affiliates: Affiliate[] = []
+      if (level2Affiliates.length > 0) {
+        const level2Ids = level2Affiliates.map((a) => a.id)
+        const { data: level3Data, error: level3Error } = await supabase
+          .from("profiles")
+          .select("id, name, email, created_at")
+          .in("referred_by", level2Ids)
+
+        if (level3Error) {
+          console.error("Erro ao buscar afiliados nível 3:", level3Error)
+        } else {
+          level3Affiliates = (level3Data || []).map((a) => ({ ...a, level: 3 }))
+        }
+      }
+
+      // 5. Buscar afiliados de nível 4 (referidos pelos afiliados de nível 3)
+      let level4Affiliates: Affiliate[] = []
+      if (level3Affiliates.length > 0) {
+        const level3Ids = level3Affiliates.map((a) => a.id)
+        const { data: level4Data, error: level4Error } = await supabase
+          .from("profiles")
+          .select("id, name, email, created_at")
+          .in("referred_by", level3Ids)
+
+        if (level4Error) {
+          console.error("Erro ao buscar afiliados nível 4:", level4Error)
+        } else {
+          level4Affiliates = (level4Data || []).map((a) => ({ ...a, level: 4 }))
+        }
+      }
+
+      // Atualizar estado com os afiliados encontrados
+      setAffiliates({
+        level1: level1Affiliates.map((a) => ({ ...a, level: 1 })),
+        level2: level2Affiliates,
+        level3: level3Affiliates,
+        level4: level4Affiliates,
+      })
+
+      // Calcular estatísticas
+      const stats = {
+        level1Count: level1Affiliates.length,
+        level2Count: level2Affiliates.length,
+        level3Count: level3Affiliates.length,
+        level4Count: level4Affiliates.length,
+        level1Earnings: 0, // Aqui você calcularia com base em investimentos reais
+        level2Earnings: 0,
+        level3Earnings: 0,
+        level4Earnings: 0,
+        totalAffiliates:
+          level1Affiliates.length + level2Affiliates.length + level3Affiliates.length + level4Affiliates.length,
+        totalEarnings: 0,
+      }
+
+      setAffiliateStats(stats)
+    } catch (err: any) {
+      console.error("Erro ao buscar dados:", err)
+      setError(err.message || "Erro ao carregar dados de afiliados")
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  // Função para buscar ou gerar código de referência
+  const fetchReferralCode = async (userId: string) => {
+    try {
+      // Verificar se o usuário já tem um código de referência
+      const { data, error } = await supabase.from("profiles").select("referral_code").eq("id", userId).single()
+
+      if (error) {
+        console.error("Erro ao buscar código de referência:", error)
+        return
+      }
+
+      // Se o usuário não tiver um código de referência, gerar um novo
+      if (!data.referral_code) {
+        // Gerar um código de referência único baseado no ID do usuário
+        const newReferralCode = generateReferralCode(userId)
+
+        // Atualizar o perfil do usuário com o novo código
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({ referral_code: newReferralCode })
+          .eq("id", userId)
+
+        if (updateError) {
+          console.error("Erro ao atualizar código de referência:", updateError)
+          return
+        }
+
+        setReferralCode(newReferralCode)
+        setReferralLink(`${window.location.origin}/cadastro?ref=${newReferralCode}`)
+      } else {
+        setReferralCode(data.referral_code)
+        setReferralLink(`${window.location.origin}/cadastro?ref=${data.referral_code}`)
+      }
+    } catch (err) {
+      console.error("Erro ao processar código de referência:", err)
+    }
+  }
+
+  // Função para gerar código de referência
+  const generateReferralCode = (userId: string): string => {
+    // Usar os primeiros 8 caracteres do ID do usuário + timestamp para garantir unicidade
+    const timestamp = new Date().getTime().toString(36).slice(-4)
+    const userIdPart = userId.replace(/-/g, "").slice(0, 6)
+    return `${userIdPart}${timestamp}`.toUpperCase()
+  }
+
+  // Função para copiar link
   const handleCopyLink = () => {
     navigator.clipboard.writeText(referralLink)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+
+    toast({
+      title: "Link copiado!",
+      description: "Link de afiliado copiado para a área de transferência.",
+    })
   }
 
-  // Modifique os manipuladores de eventos para os inputs da calculadora
+  // Função para compartilhar link
+  const handleShareLink = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "WINDICABR - Programa de Afiliados",
+          text: "Junte-se a mim na WINDICABR e comece a investir nos maiores mercados do mundo!",
+          url: referralLink,
+        })
+      } catch (err) {
+        console.error("Erro ao compartilhar:", err)
+      }
+    } else {
+      handleCopyLink()
+    }
+  }
+
+  // Manipuladores de eventos para os inputs da calculadora
   const handleLevel1CountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
       .replace(/\./g, "")
@@ -295,57 +449,17 @@ export default function AfiliadosPage() {
     const totalEarnings = level1Earnings + level2Earnings + level3Earnings + level4Earnings
 
     return {
-      level1: level1Earnings.toFixed(2),
-      level2: level2Earnings.toFixed(2),
-      level3: level3Earnings.toFixed(2),
-      level4: level4Earnings.toFixed(2),
-      total: totalEarnings.toFixed(2),
+      level1: level1Earnings,
+      level2: level2Earnings,
+      level3: level3Earnings,
+      level4: level4Earnings,
+      total: totalEarnings,
     }
   }
 
   const earnings = calculateEarnings()
 
-  // Adicione esta verificação no início do useEffect para buscar o saldo do usuário
-  useEffect(() => {
-    async function fetchUserBalance() {
-      try {
-        if (!supabase) {
-          console.error("Cliente Supabase não disponível")
-          return
-        }
-
-        // Obter a sessão atual
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-
-        if (!session) {
-          console.error("Usuário não autenticado")
-          setLoading(false)
-          return
-        }
-
-        // Buscar o perfil do usuário com o saldo
-        const { data, error } = await supabase.from("profiles").select("balance").eq("id", session.user.id).single()
-
-        if (error) {
-          console.error("Erro ao buscar saldo:", error)
-        } else if (data) {
-          setUserBalance(data.balance || 0)
-        }
-      } catch (err) {
-        console.error("Erro ao buscar saldo:", err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    if (supabase) {
-      fetchUserBalance()
-    }
-  }, [supabase])
-
-  // Adicione esta renderização condicional para mostrar o erro, se houver
+  // Renderização condicional para mostrar o erro, se houver
   if (error) {
     return (
       <div className="flex flex-col min-h-screen">
@@ -355,7 +469,10 @@ export default function AfiliadosPage() {
               <div className="text-center py-8">
                 <p className="text-red-500 mb-4">{error}</p>
                 <Button
-                  onClick={() => window.location.reload()}
+                  onClick={() => {
+                    setError(null)
+                    fetchUserData()
+                  }}
                   className="bg-gradient-to-r from-green-600 to-yellow-500 hover:from-green-700 hover:to-yellow-600 text-black font-medium"
                 >
                   Tentar novamente
@@ -373,6 +490,16 @@ export default function AfiliadosPage() {
       <header className="sticky top-0 z-40 border-b border-green-900/30 bg-black/80 backdrop-blur-xl md:flex hidden">
         <div className="container flex h-16 items-center justify-between py-4">
           <h1 className="text-xl font-bold">Programa de Afiliados</h1>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-green-900/50 text-green-500 hover:bg-green-900/20"
+            onClick={fetchUserData}
+            disabled={refreshing}
+          >
+            {refreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Atualizar
+          </Button>
         </div>
       </header>
 
@@ -404,6 +531,7 @@ export default function AfiliadosPage() {
                     variant="outline"
                     size="sm"
                     className="border-green-900/50 text-green-500 hover:bg-green-900/20"
+                    onClick={handleShareLink}
                   >
                     <Share2 className="h-4 w-4 mr-2" />
                     Compartilhar
@@ -424,11 +552,11 @@ export default function AfiliadosPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-green-500/10 border border-green-900/50 rounded-lg p-4">
                     <p className="text-sm text-gray-400">Ganhos Totais</p>
-                    <p className="text-2xl font-bold text-green-500">$0.00</p>
+                    <p className="text-2xl font-bold text-green-500">${affiliateStats.totalEarnings.toFixed(2)}</p>
                   </div>
                   <div className="bg-yellow-500/10 border border-yellow-900/50 rounded-lg p-4">
                     <p className="text-sm text-gray-400">Afiliados Totais</p>
-                    <p className="text-2xl font-bold text-yellow-500">0</p>
+                    <p className="text-2xl font-bold text-yellow-500">{affiliateStats.totalAffiliates}</p>
                   </div>
                 </div>
               </div>
@@ -438,10 +566,34 @@ export default function AfiliadosPage() {
 
         {/* Níveis de afiliados */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <AffiliateCard level={1} percentage={10} count={0} earnings="$0.00" color="green" />
-          <AffiliateCard level={2} percentage={5} count={0} earnings="$0.00" color="yellow" />
-          <AffiliateCard level={3} percentage={3} count={0} earnings="$0.00" color="red" />
-          <AffiliateCard level={4} percentage={2} count={0} earnings="$0.00" color="purple" />
+          <AffiliateCard
+            level={1}
+            percentage={10}
+            count={affiliateStats.level1Count}
+            earnings={affiliateStats.level1Earnings}
+            color="green"
+          />
+          <AffiliateCard
+            level={2}
+            percentage={5}
+            count={affiliateStats.level2Count}
+            earnings={affiliateStats.level2Earnings}
+            color="yellow"
+          />
+          <AffiliateCard
+            level={3}
+            percentage={3}
+            count={affiliateStats.level3Count}
+            earnings={affiliateStats.level3Earnings}
+            color="red"
+          />
+          <AffiliateCard
+            level={4}
+            percentage={2}
+            count={affiliateStats.level4Count}
+            earnings={affiliateStats.level4Earnings}
+            color="purple"
+          />
         </div>
 
         {/* Calculadora de ganhos */}
@@ -480,7 +632,7 @@ export default function AfiliadosPage() {
                   </div>
                   <div className="bg-green-500/10 border border-green-900/50 rounded-lg p-4">
                     <p className="text-sm text-gray-400">Ganhos Estimados (Nível 1)</p>
-                    <p className="text-xl font-bold text-green-500">${earnings.level1}</p>
+                    <p className="text-xl font-bold text-green-500">${earnings.level1.toFixed(2)}</p>
                   </div>
                 </div>
 
@@ -511,7 +663,7 @@ export default function AfiliadosPage() {
                   </div>
                   <div className="bg-yellow-500/10 border border-yellow-900/50 rounded-lg p-4">
                     <p className="text-sm text-gray-400">Ganhos Estimados (Nível 2)</p>
-                    <p className="text-xl font-bold text-yellow-500">${earnings.level2}</p>
+                    <p className="text-xl font-bold text-yellow-500">${earnings.level2.toFixed(2)}</p>
                   </div>
                 </div>
               </div>
@@ -544,7 +696,7 @@ export default function AfiliadosPage() {
                   </div>
                   <div className="bg-red-500/10 border border-red-900/50 rounded-lg p-4">
                     <p className="text-sm text-gray-400">Ganhos Estimados (Nível 3)</p>
-                    <p className="text-xl font-bold text-red-500">${earnings.level3}</p>
+                    <p className="text-xl font-bold text-red-500">${earnings.level3.toFixed(2)}</p>
                   </div>
                 </div>
 
@@ -575,7 +727,7 @@ export default function AfiliadosPage() {
                   </div>
                   <div className="bg-purple-500/10 border border-purple-900/50 rounded-lg p-4">
                     <p className="text-sm text-gray-400">Ganhos Estimados (Nível 4)</p>
-                    <p className="text-xl font-bold text-purple-500">${earnings.level4}</p>
+                    <p className="text-xl font-bold text-purple-500">${earnings.level4.toFixed(2)}</p>
                   </div>
                 </div>
               </div>
@@ -589,7 +741,7 @@ export default function AfiliadosPage() {
                     </p>
                   </div>
                   <p className="text-3xl font-bold bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 text-transparent bg-clip-text">
-                    ${earnings.total}
+                    ${earnings.total.toFixed(2)}
                   </p>
                 </div>
               </div>
@@ -606,29 +758,165 @@ export default function AfiliadosPage() {
 
         {/* Lista de afiliados */}
         <Card className="bg-black/40 border-green-900/50">
-          <CardHeader>
-            <CardTitle>Minha Equipe</CardTitle>
-            <CardDescription>Visualize todos os seus afiliados em cada nível.</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Minha Equipe</CardTitle>
+              <CardDescription>Visualize todos os seus afiliados em cada nível.</CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              className="border-green-900/50 text-green-500 hover:bg-green-900/20"
+              onClick={fetchUserData}
+              disabled={refreshing}
+            >
+              {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            </Button>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="level1" className="w-full">
+            <Tabs defaultValue="level1" className="w-full" value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="grid grid-cols-4 bg-black/50">
-                <TabsTrigger value="level1">Nível 1</TabsTrigger>
-                <TabsTrigger value="level2">Nível 2</TabsTrigger>
-                <TabsTrigger value="level3">Nível 3</TabsTrigger>
-                <TabsTrigger value="level4">Nível 4</TabsTrigger>
+                <TabsTrigger value="level1">Nível 1 ({affiliates.level1.length})</TabsTrigger>
+                <TabsTrigger value="level2">Nível 2 ({affiliates.level2.length})</TabsTrigger>
+                <TabsTrigger value="level3">Nível 3 ({affiliates.level3.length})</TabsTrigger>
+                <TabsTrigger value="level4">Nível 4 ({affiliates.level4.length})</TabsTrigger>
               </TabsList>
+
               <TabsContent value="level1" className="mt-4">
-                <div className="text-center py-8 text-gray-400">Nenhum afiliado encontrado neste nível.</div>
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-green-500" />
+                  </div>
+                ) : affiliates.level1.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-green-900/30">
+                          <th className="text-left py-3 px-4">Nome</th>
+                          <th className="text-left py-3 px-4">Email</th>
+                          <th className="text-left py-3 px-4">Data de Cadastro</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {affiliates.level1.map((affiliate) => (
+                          <tr key={affiliate.id} className="border-b border-green-900/10">
+                            <td className="py-3 px-4">{affiliate.name || "Usuário"}</td>
+                            <td className="py-3 px-4">{affiliate.email || "Email não disponível"}</td>
+                            <td className="py-3 px-4">{new Date(affiliate.created_at).toLocaleDateString("pt-BR")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                    <p>Nenhum afiliado encontrado neste nível.</p>
+                    <p className="mt-2 text-sm">Compartilhe seu link de afiliado para começar a ganhar comissões!</p>
+                  </div>
+                )}
               </TabsContent>
+
               <TabsContent value="level2" className="mt-4">
-                <div className="text-center py-8 text-gray-400">Nenhum afiliado encontrado neste nível.</div>
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-yellow-500" />
+                  </div>
+                ) : affiliates.level2.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-yellow-900/30">
+                          <th className="text-left py-3 px-4">Nome</th>
+                          <th className="text-left py-3 px-4">Email</th>
+                          <th className="text-left py-3 px-4">Data de Cadastro</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {affiliates.level2.map((affiliate) => (
+                          <tr key={affiliate.id} className="border-b border-yellow-900/10">
+                            <td className="py-3 px-4">{affiliate.name || "Usuário"}</td>
+                            <td className="py-3 px-4">{affiliate.email || "Email não disponível"}</td>
+                            <td className="py-3 px-4">{new Date(affiliate.created_at).toLocaleDateString("pt-BR")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                    <p>Nenhum afiliado encontrado neste nível.</p>
+                  </div>
+                )}
               </TabsContent>
+
               <TabsContent value="level3" className="mt-4">
-                <div className="text-center py-8 text-gray-400">Nenhum afiliado encontrado neste nível.</div>
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-red-500" />
+                  </div>
+                ) : affiliates.level3.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-red-900/30">
+                          <th className="text-left py-3 px-4">Nome</th>
+                          <th className="text-left py-3 px-4">Email</th>
+                          <th className="text-left py-3 px-4">Data de Cadastro</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {affiliates.level3.map((affiliate) => (
+                          <tr key={affiliate.id} className="border-b border-red-900/10">
+                            <td className="py-3 px-4">{affiliate.name || "Usuário"}</td>
+                            <td className="py-3 px-4">{affiliate.email || "Email não disponível"}</td>
+                            <td className="py-3 px-4">{new Date(affiliate.created_at).toLocaleDateString("pt-BR")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                    <p>Nenhum afiliado encontrado neste nível.</p>
+                  </div>
+                )}
               </TabsContent>
+
               <TabsContent value="level4" className="mt-4">
-                <div className="text-center py-8 text-gray-400">Nenhum afiliado encontrado neste nível.</div>
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+                  </div>
+                ) : affiliates.level4.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-purple-900/30">
+                          <th className="text-left py-3 px-4">Nome</th>
+                          <th className="text-left py-3 px-4">Email</th>
+                          <th className="text-left py-3 px-4">Data de Cadastro</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {affiliates.level4.map((affiliate) => (
+                          <tr key={affiliate.id} className="border-b border-purple-900/10">
+                            <td className="py-3 px-4">{affiliate.name || "Usuário"}</td>
+                            <td className="py-3 px-4">{affiliate.email || "Email não disponível"}</td>
+                            <td className="py-3 px-4">{new Date(affiliate.created_at).toLocaleDateString("pt-BR")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                    <p>Nenhum afiliado encontrado neste nível.</p>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </CardContent>
@@ -656,7 +944,7 @@ export default function AfiliadosPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Investimento Médio</p>
-                      <p className="text-lg font-bold text-yellow-500">${level1Amount}</p>
+                      <p className="text-lg font-bold text-yellow-500">${level1Amount.toFixed(2)}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Investimento Total</p>
@@ -664,7 +952,7 @@ export default function AfiliadosPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Comissão (10%)</p>
-                      <p className="text-lg font-bold text-green-500">${earnings.level1}</p>
+                      <p className="text-lg font-bold text-green-500">${earnings.level1.toFixed(2)}</p>
                     </div>
                   </div>
                 </div>
@@ -680,7 +968,7 @@ export default function AfiliadosPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Investimento Médio</p>
-                      <p className="text-lg font-bold text-yellow-500">${level2Amount}</p>
+                      <p className="text-lg font-bold text-yellow-500">${level2Amount.toFixed(2)}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Investimento Total</p>
@@ -688,7 +976,7 @@ export default function AfiliadosPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Comissão (5%)</p>
-                      <p className="text-lg font-bold text-yellow-500">${earnings.level2}</p>
+                      <p className="text-lg font-bold text-yellow-500">${earnings.level2.toFixed(2)}</p>
                     </div>
                   </div>
                 </div>
@@ -706,7 +994,7 @@ export default function AfiliadosPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Investimento Médio</p>
-                      <p className="text-lg font-bold text-yellow-500">${level3Amount}</p>
+                      <p className="text-lg font-bold text-yellow-500">${level3Amount.toFixed(2)}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Investimento Total</p>
@@ -714,7 +1002,7 @@ export default function AfiliadosPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Comissão (3%)</p>
-                      <p className="text-lg font-bold text-red-500">${earnings.level3}</p>
+                      <p className="text-lg font-bold text-red-500">${earnings.level3.toFixed(2)}</p>
                     </div>
                   </div>
                 </div>
@@ -730,7 +1018,7 @@ export default function AfiliadosPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Investimento Médio</p>
-                      <p className="text-lg font-bold text-yellow-500">${level4Amount}</p>
+                      <p className="text-lg font-bold text-yellow-500">${level4Amount.toFixed(2)}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Investimento Total</p>
@@ -738,7 +1026,7 @@ export default function AfiliadosPage() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Comissão (2%)</p>
-                      <p className="text-lg font-bold text-purple-500">${earnings.level4}</p>
+                      <p className="text-lg font-bold text-purple-500">${earnings.level4.toFixed(2)}</p>
                     </div>
                   </div>
                 </div>
@@ -765,7 +1053,7 @@ export default function AfiliadosPage() {
                 <div className="text-center md:text-right">
                   <p className="text-sm text-gray-400">Ganhos Totais Estimados</p>
                   <p className="text-3xl font-bold bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 text-transparent bg-clip-text">
-                    ${earnings.total}
+                    ${earnings.total.toFixed(2)}
                   </p>
                 </div>
               </div>

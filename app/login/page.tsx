@@ -2,10 +2,10 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Zap } from "lucide-react"
+import { Zap, Loader2, Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -20,14 +20,24 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [supabase, setSupabase] = useState<any>(null)
+
   const router = useRouter()
   const { toast } = useToast()
-  const supabase = createBrowserClient()
+
+  useEffect(() => {
+    // Inicializar o cliente Supabase após a montagem do componente
+    const client = createBrowserClient()
+    setSupabase(client)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError("")
 
     if (!email || !password) {
+      setError("Por favor, preencha todos os campos.")
       toast({
         title: "Erro no login",
         description: "Por favor, preencha todos os campos.",
@@ -36,24 +46,38 @@ export default function LoginPage() {
       return
     }
 
+    if (!supabase) {
+      setError("Erro de conexão com o servidor")
+      toast({
+        title: "Erro no login",
+        description: "Não foi possível conectar ao servidor. Tente novamente.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsLoading(true)
 
     try {
-      // Limpar qualquer sessão anterior
-      await supabase.auth.signOut()
+      console.log("Tentando fazer login com:", email)
 
       // Fazer login com as credenciais fornecidas
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error: loginError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (error) throw error
+      if (loginError) {
+        console.error("Erro no login:", loginError)
+        throw loginError
+      }
 
       // Verificar se o login foi bem-sucedido
       if (!data.session) {
         throw new Error("Falha ao estabelecer sessão")
       }
+
+      console.log("Login bem-sucedido:", data.user.id)
 
       toast({
         title: "Login realizado com sucesso!",
@@ -78,6 +102,7 @@ export default function LoginPage() {
         }
       }
 
+      setError(errorMessage)
       toast({
         title: "Erro no login",
         description: errorMessage,
@@ -140,15 +165,24 @@ export default function LoginPage() {
                     Esqueceu a senha?
                   </Link>
                 </div>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="bg-black/50 border-green-500/20 focus:border-green-500/50"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="bg-black/50 border-green-500/20 focus:border-green-500/50 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center space-x-2">
@@ -167,7 +201,13 @@ export default function LoginPage() {
                 className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
                 disabled={isLoading}
               >
-                {isLoading ? "Entrando..." : "Entrar"}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Entrando...
+                  </>
+                ) : (
+                  "Entrar"
+                )}
               </Button>
             </form>
 

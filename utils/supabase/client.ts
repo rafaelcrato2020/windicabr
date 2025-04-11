@@ -14,37 +14,21 @@ export function createBrowserClient() {
     console.error("Erro: Variáveis de ambiente do Supabase não estão definidas corretamente.")
     console.error(`NEXT_PUBLIC_SUPABASE_URL: ${supabaseUrl ? "Definido" : "Não definido"}`)
     console.error(`NEXT_PUBLIC_SUPABASE_ANON_KEY: ${supabaseKey ? "Definido" : "Não definido"}`)
-
-    // Fallback para evitar erros de runtime - usar valores vazios
-    // Isso permitirá que a aplicação carregue, mas as operações do Supabase falharão
-    return createClient("https://example.supabase.co", "example-key")
+    return null
   }
 
-  supabaseClient = createClient(supabaseUrl, supabaseKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      storageKey: "supabase.auth.token",
-      storage: {
-        getItem: (key) => {
-          if (typeof window === "undefined") {
-            return null
-          }
-          return window.localStorage.getItem(key)
-        },
-        setItem: (key, value) => {
-          if (typeof window !== "undefined") {
-            window.localStorage.setItem(key, value)
-          }
-        },
-        removeItem: (key) => {
-          if (typeof window !== "undefined") {
-            window.localStorage.removeItem(key)
-          }
-        },
+  try {
+    supabaseClient = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        storageKey: "supabase.auth.token",
       },
-    },
-  })
+    })
 
-  return supabaseClient
+    return supabaseClient
+  } catch (error) {
+    console.error("Erro ao criar cliente Supabase:", error)
+    return null
+  }
 }

@@ -157,6 +157,21 @@ export default function CadastroPage() {
           variant: "default",
         })
 
+        // Fazer login com o novo usuário para garantir a sessão correta
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.senha,
+        })
+
+        if (signInError) {
+          console.error("Erro ao fazer login automático:", signInError)
+          // Redirecionar para a página de login mesmo com erro
+          setTimeout(() => {
+            router.push("/login")
+          }, 2000)
+          return
+        }
+
         // Redirecionar para o dashboard após o cadastro
         setTimeout(() => {
           router.push("/dashboard")

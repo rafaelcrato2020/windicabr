@@ -26,32 +26,63 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!email || !password) {
+      toast({
+        title: "Erro no login",
+        description: "Por favor, preencha todos os campos.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsLoading(true)
-    setError("")
 
     try {
-      // Login com Supabase
-      const { error: loginError } = await supabase.auth.signInWithPassword({
+      // Limpar qualquer sessão anterior
+      await supabase.auth.signOut()
+
+      // Fazer login com as credenciais fornecidas
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (loginError) {
-        // Mostrar mensagem de erro específica
-        setError("Email ou senha incorretos. Por favor, verifique suas credenciais.")
-        return
+      if (error) throw error
+
+      // Verificar se o login foi bem-sucedido
+      if (!data.session) {
+        throw new Error("Falha ao estabelecer sessão")
       }
 
       toast({
         title: "Login realizado com sucesso!",
         description: "Redirecionando para o dashboard...",
-        variant: "success",
       })
 
-      // Redirecionar para o dashboard
-      router.push("/dashboard")
+      // Redirecionar após um pequeno delay para que o usuário veja a mensagem
+      setTimeout(() => {
+        router.push("/dashboard")
+        router.refresh()
+      }, 1000)
     } catch (error: any) {
-      setError("Ocorreu um erro ao fazer login. Por favor, tente novamente.")
+      console.error("Erro no login:", error)
+
+      let errorMessage = "Ocorreu um erro durante o login. Tente novamente."
+
+      if (error.message) {
+        if (error.message.includes("Invalid login credentials")) {
+          errorMessage = "Email ou senha incorretos."
+        } else if (error.message.includes("Email not confirmed")) {
+          errorMessage = "Por favor, confirme seu email antes de fazer login."
+        }
+      }
+
+      toast({
+        title: "Erro no login",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setIsLoading(false)
     }

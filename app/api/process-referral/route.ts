@@ -1,14 +1,36 @@
-import { createServerClient } from "@/utils/supabase/server"
+import { createRouteHandlerClient } from "@/utils/supabase/server"
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 
 export async function POST(request: Request) {
   try {
-    const supabase = createServerClient()
+    const cookieStore = cookies()
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
     const { userId, referralCode } = await request.json()
 
     if (!userId || !referralCode) {
       return NextResponse.json(
         { success: false, error: "ID do usuário e código de referência são obrigatórios" },
+        { status: 400 },
+      )
+    }
+
+    // Verificar se o usuário que está sendo atualizado existe
+    const { data: userExists, error: userCheckError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", userId)
+      .single()
+
+    if (userCheckError || !userExists) {
+      console.error("Erro ao verificar usuário:", userCheckError)
+      return NextResponse.json({ success: false, error: "Usuário não encontrado" }, { status: 404 })
+    }
+
+    // Verificar se o referenciador não é o mesmo que o usuário (evitar auto-referência)
+    if (userExists.id === referralCode) {
+      return NextResponse.json(
+        { success: false, error: "Não é possível usar seu próprio código de referência" },
         { status: 400 },
       )
     }

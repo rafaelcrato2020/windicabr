@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 
 export function createServerClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
@@ -16,3 +17,5 @@ export function createServerClient() {
     },
   })
 }
+
+export { createRouteHandlerClient }

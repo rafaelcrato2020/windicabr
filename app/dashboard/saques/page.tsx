@@ -5,7 +5,7 @@ import { DialogFooter } from "@/components/ui/dialog"
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { AlertCircle, ArrowDown, Clock } from "lucide-react"
+import { AlertCircle, Info } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -165,11 +165,11 @@ export default function SaquesPage() {
                       )}
 
                       <div className="space-y-2">
-                        <Label htmlFor="wallet" className="text-sm font-medium">
-                          Endereço da Carteira USDT (Rede TRC20)
+                        <Label htmlFor="pixKey" className="text-sm font-medium">
+                          Carteira de USDT (Rede TRC20)
                         </Label>
                         <Input
-                          id="wallet"
+                          id="pixKey"
                           type="text"
                           value={walletAddress}
                           onChange={(e) => setWalletAddress(e.target.value)}
@@ -190,36 +190,14 @@ export default function SaquesPage() {
                     </div>
                   </TabsContent>
                   <TabsContent value="history" className="space-y-6 mt-6">
-                    <div className="space-y-4">
-                      {[
-                        { amount: 500, date: "14 Mai 2023", status: "Processando", statusColor: "text-yellow-500" },
-                        { amount: 1000, date: "10 Mai 2023", status: "Concluído", statusColor: "text-green-500" },
-                        { amount: 750, date: "05 Mai 2023", status: "Concluído", statusColor: "text-green-500" },
-                        { amount: 300, date: "01 Mai 2023", status: "Concluído", statusColor: "text-green-500" },
-                      ].map((withdrawal, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between p-4 bg-black/30 rounded-lg border border-green-900/30"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
-                              <ArrowDown className="h-5 w-5 text-red-500" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-white">{formatCurrency(withdrawal.amount)}</p>
-                              <p className="text-xs text-gray-400">{withdrawal.date}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className={`text-sm font-medium ${withdrawal.statusColor}`}>{withdrawal.status}</p>
-                            {withdrawal.status === "Processando" && (
-                              <p className="text-xs text-gray-400 flex items-center gap-1">
-                                <Clock className="h-3 w-3" /> Estimado: 24h
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                      <div className="w-16 h-16 rounded-full bg-gray-800/50 flex items-center justify-center mb-4">
+                        <Info className="h-8 w-8 text-gray-400" />
+                      </div>
+                      <h3 className="text-lg font-medium mb-2">Nenhum saque encontrado</h3>
+                      <p className="text-gray-400 max-w-md">
+                        Você ainda não realizou nenhum saque. Quando você solicitar um saque, ele aparecerá aqui.
+                      </p>
                     </div>
                   </TabsContent>
                 </Tabs>
@@ -288,7 +266,7 @@ export default function SaquesPage() {
                 <span className="text-sm font-medium text-white">{formatCurrency(withdrawAmount)} USDT</span>
               </div>
               <div className="pt-2 border-t border-green-900/30">
-                <span className="text-sm text-gray-400">Endereço da Carteira:</span>
+                <span className="text-sm text-gray-400">Carteira de USDT:</span>
                 <div className="flex items-center gap-2 mt-1">
                   <p className="text-sm text-white break-all">{walletAddress}</p>
                 </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useToast } from "@/hooks/use-toast"
+import { useRouter } from "next/navigation"
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(false)
@@ -10,36 +11,12 @@ export default function SettingsPage() {
     type: "info" | "success" | "error"
   } | null>(null)
   const { toast } = useToast()
+  const router = useRouter()
 
-  const handleInitTables = async () => {
-    try {
-      setLoading(true)
-      setInitStatus({ message: "Inicializando tabelas...", type: "info" })
+  // Atualizar a função handleInitTables para redirecionar para a nova página
 
-      const response = await fetch("/api/init-tables")
-      const data = await response.json()
-
-      if (data.success) {
-        setInitStatus({ message: "Tabelas inicializadas com sucesso!", type: "success" })
-        toast({
-          title: "Sucesso",
-          description: "Tabelas inicializadas com sucesso",
-        })
-      } else {
-        setInitStatus({ message: `Erro: ${data.error}`, type: "error" })
-        throw new Error(data.error || "Erro ao inicializar tabelas")
-      }
-    } catch (error: any) {
-      console.error("Erro ao inicializar tabelas:", error)
-      setInitStatus({ message: `Erro: ${error.message}`, type: "error" })
-      toast({
-        title: "Erro",
-        description: error.message || "Não foi possível inicializar as tabelas",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
+  const handleInitTables = () => {
+    router.push("/admin-panel/configuracoes/init-database")
   }
 
   return (

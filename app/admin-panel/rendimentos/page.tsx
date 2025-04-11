@@ -101,11 +101,13 @@ export default function YieldsPage() {
 
           if (yieldAmount <= 0) continue
 
-          // Atualizar saldo do usuário - removendo referências às colunas que não existem
+          // Atualizar saldo do usuário
           const { error: updateError } = await supabase
             .from("profiles")
             .update({
               balance: user.balance + yieldAmount,
+              last_yield_date: new Date().toISOString(),
+              last_yield_rate: rate,
             })
             .eq("id", user.id)
 
@@ -115,7 +117,7 @@ export default function YieldsPage() {
             continue
           }
 
-          // Registrar transação
+          // Registrar transação de rendimento
           const { error: transactionError } = await supabase.from("transactions").insert({
             user_id: user.id,
             amount: yieldAmount,
@@ -128,6 +130,22 @@ export default function YieldsPage() {
             console.error("Erro ao registrar transação:", transactionError)
             errorCount++
           } else {
+            // Registrar também na tabela yields para manter consistência
+            const { error: yieldError } = await supabase
+              .from("yields")
+              .insert({
+                user_id: user.id,
+                amount: yieldAmount,
+                percentage: rate,
+                status: "completed",
+                paid_at: new Date().toISOString(),
+              })
+              .single()
+
+            if (yieldError && !yieldError.message.includes("does not exist")) {
+              console.error("Erro ao registrar yield:", yieldError)
+            }
+
             successCount++
             totalPaid += yieldAmount
           }

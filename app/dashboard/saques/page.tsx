@@ -67,6 +67,85 @@ export default function SaquesPage() {
   const supabase = createBrowserClient()
   const { toast } = useToast()
 
+  // Verificar e atualizar a estrutura da tabela withdrawals
+  useEffect(() => {
+    async function checkAndUpdateWithdrawalsTable() {
+      try {
+        // Verificar se a tabela withdrawals existe
+        const { error: tableCheckError } = await supabase.from("withdrawals").select("id").limit(1)
+
+        if (tableCheckError) {
+          if (tableCheckError.message.includes("does not exist")) {
+            console.log("Tabela withdrawals não existe, criando...")
+
+            // Criar a tabela withdrawals com todas as colunas necessárias
+            await supabase.rpc("exec_sql", {
+              sql_query: `
+                CREATE TABLE IF NOT EXISTS public.withdrawals (
+                  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                  user_id UUID REFERENCES auth.users(id),
+                  amount DECIMAL(15, 2) NOT NULL,
+                  status TEXT DEFAULT 'pending',
+                  pix_key TEXT,
+                  notes TEXT,
+                  withdrawal_type TEXT,
+                  investment_id UUID,
+                  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+              `,
+            })
+            console.log("Tabela withdrawals criada com sucesso")
+          }
+        } else {
+          // A tabela existe, verificar se a coluna withdrawal_type existe
+          try {
+            const { error: columnCheckError } = await supabase.from("withdrawals").select("withdrawal_type").limit(1)
+
+            if (columnCheckError && columnCheckError.message.includes("column")) {
+              console.log("Coluna withdrawal_type não existe, adicionando...")
+
+              // Adicionar a coluna withdrawal_type
+              await supabase.rpc("exec_sql", {
+                sql_query: `
+                  ALTER TABLE public.withdrawals 
+                  ADD COLUMN IF NOT EXISTS withdrawal_type TEXT;
+                `,
+              })
+              console.log("Coluna withdrawal_type adicionada com sucesso")
+            }
+          } catch (err) {
+            console.error("Erro ao verificar coluna withdrawal_type:", err)
+          }
+
+          // Verificar se a coluna investment_id existe
+          try {
+            const { error: columnCheckError } = await supabase.from("withdrawals").select("investment_id").limit(1)
+
+            if (columnCheckError && columnCheckError.message.includes("column")) {
+              console.log("Coluna investment_id não existe, adicionando...")
+
+              // Adicionar a coluna investment_id
+              await supabase.rpc("exec_sql", {
+                sql_query: `
+                  ALTER TABLE public.withdrawals 
+                  ADD COLUMN IF NOT EXISTS investment_id UUID;
+                `,
+              })
+              console.log("Coluna investment_id adicionada com sucesso")
+            }
+          } catch (err) {
+            console.error("Erro ao verificar coluna investment_id:", err)
+          }
+        }
+      } catch (err) {
+        console.error("Erro ao verificar/atualizar tabela withdrawals:", err)
+      }
+    }
+
+    checkAndUpdateWithdrawalsTable()
+  }, [supabase])
+
   // Buscar dados do usuário, incluindo saldo, comissões, rendimentos e investimentos
   useEffect(() => {
     async function fetchUserData() {
@@ -87,7 +166,7 @@ export default function SaquesPage() {
         // Buscar o perfil do usuário com o saldo
         const { data: profileData, error: profileError } = await supabase
           .from("profiles")
-          .select("balance, invested_balance")
+          .select("balance")
           .eq("id", session.user.id)
           .single()
 
@@ -96,40 +175,44 @@ export default function SaquesPage() {
         } else if (profileData) {
           setUserBalance(profileData.balance || 0)
 
-          // Buscar comissões de indicações
+          // Buscar comissões de indicações e rendimentos de forma mais abrangente
           const { data: commissionsData, error: commissionsError } = await supabase
             .from("transactions")
-            .select("amount")
+            .select("amount, type")
             .eq("user_id", session.user.id)
-            .eq("type", "commission")
+            .in("type", ["commission", "referral"])
             .eq("status", "completed")
 
           if (commissionsError) {
             console.error("Erro ao buscar comissões:", commissionsError)
           } else {
-            const totalCommissions = commissionsData.reduce((sum, item) => sum + (item.amount || 0), 0)
+            const totalCommissions = commissionsData
+              .filter((item) => item.type === "commission" || item.type === "referral")
+              .reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
             setCommissionBalance(totalCommissions)
           }
 
-          // Buscar rendimentos
+          // Buscar rendimentos incluindo yields
           const { data: earningsData, error: earningsError } = await supabase
             .from("transactions")
-            .select("amount")
+            .select("amount, type")
             .eq("user_id", session.user.id)
-            .eq("type", "earning")
+            .in("type", ["earning", "yield"])
             .eq("status", "completed")
 
           if (earningsError) {
             console.error("Erro ao buscar rendimentos:", earningsError)
           } else {
-            const totalEarnings = earningsData.reduce((sum, item) => sum + (item.amount || 0), 0)
+            const totalEarnings = earningsData
+              .filter((item) => item.type === "earning" || item.type === "yield")
+              .reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
             setEarningsBalance(totalEarnings)
           }
 
           // Calcular saldo disponível para saque (comissões + rendimentos)
           const totalWithdrawable =
-            (commissionsData ? commissionsData.reduce((sum, item) => sum + (item.amount || 0), 0) : 0) +
-            (earningsData ? earningsData.reduce((sum, item) => sum + (item.amount || 0), 0) : 0)
+            (commissionsData ? commissionsData.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) : 0) +
+            (earningsData ? earningsData.reduce((sum, item) => sum + (Number(item.amount) || 0), 0) : 0)
           setWithdrawableBalance(totalWithdrawable)
 
           // Buscar investimentos
@@ -164,16 +247,20 @@ export default function SaquesPage() {
         }
 
         // Buscar histórico de saques
-        const { data: withdrawalsData, error: withdrawalsError } = await supabase
-          .from("withdrawals")
-          .select("*")
-          .eq("user_id", session.user.id)
-          .order("created_at", { ascending: false })
+        try {
+          const { data: withdrawalsData, error: withdrawalsError } = await supabase
+            .from("withdrawals")
+            .select("*")
+            .eq("user_id", session.user.id)
+            .order("created_at", { ascending: false })
 
-        if (!withdrawalsError && withdrawalsData) {
-          setWithdrawals(withdrawalsData)
-        } else if (withdrawalsError) {
-          console.error("Erro ao buscar histórico de saques:", withdrawalsError)
+          if (!withdrawalsError && withdrawalsData) {
+            setWithdrawals(withdrawalsData)
+          } else if (withdrawalsError && !withdrawalsError.message.includes("does not exist")) {
+            console.error("Erro ao buscar histórico de saques:", withdrawalsError)
+          }
+        } catch (err) {
+          console.log("Tabela de saques pode não existir ainda:", err)
         }
       } catch (err) {
         console.error("Erro ao buscar dados do usuário:", err)
@@ -286,7 +373,11 @@ export default function SaquesPage() {
       .replace(/[^\d.]/g, "")
 
     // Converte para número
-    const numberValue = Number(numericValue)
+    const numberValue = Number.parseFloat(numericValue)
+
+    if (isNaN(numberValue)) {
+      return // Se não for um número válido, não atualiza
+    }
 
     // Atualiza o estado com o valor numérico
     setWithdrawAmount(numberValue)
@@ -338,20 +429,19 @@ export default function SaquesPage() {
           )
         }
 
-        // 1. Criar registro de saque
-        const { data: withdrawal, error: withdrawalError } = await supabase
-          .from("withdrawals")
-          .insert({
-            user_id: session.user.id,
-            amount: withdrawAmount,
-            pix_key: walletAddress,
-            status: "pending",
-            withdrawal_type: "commission_and_earnings",
-          })
-          .select()
+        // Usar SQL direto para inserir o registro de saque
+        const { error: insertError } = await supabase.rpc("exec_sql", {
+          sql_query: `
+            INSERT INTO public.withdrawals 
+            (id, user_id, amount, pix_key, status, withdrawal_type, created_at, updated_at)
+            VALUES 
+            (gen_random_uuid(), '${session.user.id}', ${withdrawAmount}, '${walletAddress.replace(/'/g, "''")}', 'pending', 'commission_and_earnings', NOW(), NOW())
+          `,
+        })
 
-        if (withdrawalError) {
-          throw new Error("Erro ao registrar solicitação de saque")
+        if (insertError) {
+          console.error("Erro detalhado ao registrar saque:", insertError)
+          throw new Error(`Erro ao registrar solicitação de saque: ${insertError.message}`)
         }
       } else if (selectedWithdrawalType === "principal") {
         if (!selectedInvestment) {
@@ -382,21 +472,19 @@ export default function SaquesPage() {
           throw new Error("O valor do saque não pode exceder o valor do investimento.")
         }
 
-        // 1. Criar registro de saque
-        const { data: withdrawal, error: withdrawalError } = await supabase
-          .from("withdrawals")
-          .insert({
-            user_id: session.user.id,
-            amount: withdrawAmount,
-            pix_key: walletAddress,
-            status: "pending",
-            withdrawal_type: "principal",
-            investment_id: selectedInvestment,
-          })
-          .select()
+        // Usar SQL direto para inserir o registro de saque
+        const { error: insertError } = await supabase.rpc("exec_sql", {
+          sql_query: `
+            INSERT INTO public.withdrawals 
+            (id, user_id, amount, pix_key, status, withdrawal_type, investment_id, created_at, updated_at)
+            VALUES 
+            (gen_random_uuid(), '${session.user.id}', ${withdrawAmount}, '${walletAddress.replace(/'/g, "''")}', 'pending', 'principal', '${selectedInvestment}', NOW(), NOW())
+          `,
+        })
 
-        if (withdrawalError) {
-          throw new Error("Erro ao registrar solicitação de saque")
+        if (insertError) {
+          console.error("Erro detalhado ao registrar saque:", insertError)
+          throw new Error(`Erro ao registrar solicitação de saque: ${insertError.message}`)
         }
 
         // 2. Atualizar status do investimento se o valor sacado for igual ao valor do investimento
@@ -459,14 +547,18 @@ export default function SaquesPage() {
       }
 
       // Atualizar lista de saques
-      const { data: updatedWithdrawals } = await supabase
-        .from("withdrawals")
-        .select("*")
-        .eq("user_id", session.user.id)
-        .order("created_at", { ascending: false })
+      try {
+        const { data: updatedWithdrawals } = await supabase
+          .from("withdrawals")
+          .select("*")
+          .eq("user_id", session.user.id)
+          .order("created_at", { ascending: false })
 
-      if (updatedWithdrawals) {
-        setWithdrawals(updatedWithdrawals)
+        if (updatedWithdrawals) {
+          setWithdrawals(updatedWithdrawals)
+        }
+      } catch (err) {
+        console.log("Erro ao atualizar lista de saques, mas o saque foi registrado:", err)
       }
 
       // Mostrar mensagem de sucesso

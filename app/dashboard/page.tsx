@@ -222,6 +222,14 @@ export default function DashboardPage() {
           }
         }
 
+        // Buscar rendimentos de forma mais abrangente
+        const { data: earningsData, error: earningsError } = await supabase
+          .from("transactions")
+          .select("amount")
+          .eq("user_id", userId)
+          .in("type", ["earning", "yield"]) // Buscar tanto "earning" quanto "yield"
+          .eq("status", "completed")
+
         // 5. Calcular rendimento diário (último rendimento registrado)
         let dailyEarnings = 0
         try {
@@ -229,18 +237,19 @@ export default function DashboardPage() {
           const yesterday = new Date(today)
           yesterday.setDate(yesterday.getDate() - 1)
 
+          // Buscar transações de rendimento mais recentes
           const { data: dailyEarningsData, error: dailyEarningsError } = await supabase
-            .from("yields")
+            .from("transactions")
             .select("amount")
             .eq("user_id", userId)
+            .in("type", ["yield", "earning"])
+            .eq("status", "completed")
             .gte("created_at", yesterday.toISOString())
             .order("created_at", { ascending: false })
             .limit(1)
 
           if (!dailyEarningsError && dailyEarningsData && dailyEarningsData.length > 0) {
             dailyEarnings = Number.parseFloat(dailyEarningsData[0].amount) || 0
-          } else if (dailyEarningsError) {
-            console.log("Erro ao buscar rendimento diário:", dailyEarningsError.message)
           }
         } catch (err) {
           console.log("Erro ao processar rendimento diário:", err)

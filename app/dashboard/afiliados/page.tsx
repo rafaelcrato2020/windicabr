@@ -307,10 +307,12 @@ export default function AfiliadosPage() {
         }
 
         setReferralCode(newReferralCode)
-        setReferralLink(`${window.location.origin}/cadastro?ref=${newReferralCode}`)
+        // Agora o link aponta para a página inicial com o parâmetro de referência
+        setReferralLink(`${window.location.origin}/?ref=${newReferralCode}`)
       } else {
         setReferralCode(data.referral_code)
-        setReferralLink(`${window.location.origin}/cadastro?ref=${data.referral_code}`)
+        // Agora o link aponta para a página inicial com o parâmetro de referência
+        setReferralLink(`${window.location.origin}/?ref=${data.referral_code}`)
       }
     } catch (err) {
       console.error("Erro ao processar código de referência:", err)

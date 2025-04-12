@@ -95,8 +95,10 @@ export default function CadastroPage() {
           data: {
             name: formData.nome,
             phone: formData.telefone,
-            email_confirmed: true, // Marcar o e-mail como confirmado
+            email_confirmed: true, // Usuário não precisa confirmar email
           },
+          // Adicionar esta opção para desativar emails de confirmação
+          emailRedirectTo: undefined,
         },
       })
 

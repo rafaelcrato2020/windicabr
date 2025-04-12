@@ -1,3 +1,9 @@
+/**
+ * Este endpoint é usado para confirmar automaticamente o email de um usuário
+ * caso o processo automático durante o cadastro falhe por algum motivo.
+ * Na maioria dos casos, não será necessário chamar este endpoint, pois
+ * os emails são marcados como confirmados durante o cadastro.
+ */
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"

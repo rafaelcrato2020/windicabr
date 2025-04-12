@@ -98,7 +98,7 @@ export default function TransacoesPage() {
             ...transaction,
             typeLabel,
             statusColor,
-            amountDisplay: `${amountPrefix}R$ ${transaction.amount.toFixed(2)}`,
+            amountDisplay: `${amountPrefix}$ ${transaction.amount.toFixed(2)}`,
             dateFormatted: new Date(transaction.created_at).toLocaleDateString("pt-BR"),
             timeFormatted: new Date(transaction.created_at).toLocaleTimeString("pt-BR"),
           }
@@ -356,7 +356,7 @@ export default function TransacoesPage() {
                   <DollarSign className="h-5 w-5 text-green-500" />
                 </div>
               </div>
-              <p className="text-2xl font-bold text-green-500">R$ {stats.investments.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-green-500">$ {stats.investments.toFixed(2)}</p>
               <p className="text-sm text-gray-400 mt-1">Total investido</p>
             </CardContent>
           </Card>
@@ -369,7 +369,7 @@ export default function TransacoesPage() {
                   <ArrowUp className="h-5 w-5 text-green-500" />
                 </div>
               </div>
-              <p className="text-2xl font-bold text-green-500">R$ {stats.yields.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-green-500">$ {stats.yields.toFixed(2)}</p>
               <p className="text-sm text-gray-400 mt-1">Total de rendimentos</p>
             </CardContent>
           </Card>
@@ -382,7 +382,7 @@ export default function TransacoesPage() {
                   <ArrowDown className="h-5 w-5 text-red-500" />
                 </div>
               </div>
-              <p className="text-2xl font-bold text-red-500">R$ {stats.withdrawals.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-red-500">$ {stats.withdrawals.toFixed(2)}</p>
               <p className="text-sm text-gray-400 mt-1">Total de saques</p>
             </CardContent>
           </Card>
@@ -395,7 +395,7 @@ export default function TransacoesPage() {
                   <Users className="h-5 w-5 text-yellow-500" />
                 </div>
               </div>
-              <p className="text-2xl font-bold text-yellow-500">R$ {stats.commissions.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-yellow-500">$ {stats.commissions.toFixed(2)}</p>
               <p className="text-sm text-gray-400 mt-1">Total de comissões</p>
             </CardContent>
           </Card>

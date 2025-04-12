@@ -21,6 +21,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useMobile } from "@/hooks/use-mobile"
 import { createBrowserClient } from "@/utils/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { processReferralCommission } from "@/utils/process-referral-commission"
 
 // Modifique a função formatCurrency para garantir o formato brasileiro
 function formatCurrency(value: number): string {
@@ -57,12 +58,13 @@ export default function InvestimentosPage() {
   const [totalReturn, setTotalReturn] = useState(0)
   const supabase = createBrowserClient()
   const { toast } = useToast()
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false)
 
+  // Alterando o valor inicial da calculadora para $10
   const [calculatorAmount, setCalculatorAmount] = useState(1000)
   const [calculatorAmountFormatted, setCalculatorAmountFormatted] = useState("")
-  const [calculatorDays, setCalculatorDays] = useState(30)
-  const [calculatorRate, setCalculatorRate] = useState(4)
-  const [calculatorRateFormatted, setCalculatorRateFormatted] = useState("4,00")
+  const [calculatorDays, setCalculatorDays] = useState(20)
+  const calculatorRate = 6 // Taxa atualizada para 6%
 
   const walletAddress = "0xda217f2fe75F93AD36bA361193a8540a731ddAb6"
   const isMobile = useMobile()
@@ -113,18 +115,22 @@ export default function InvestimentosPage() {
 
           investments?.forEach((inv) => {
             total += inv.amount
-            dailyReturnTotal += inv.amount * (inv.rate / 100)
+            // Usar a taxa do investimento ou o valor padrão de 6%
+            const rate = inv.rate || 6
+            dailyReturnTotal += inv.amount * (rate / 100)
 
             // Calcular rendimento acumulado (dias desde a criação * taxa diária * valor)
             const createdAt = new Date(inv.created_at)
             const now = new Date()
             const daysDiff = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24))
-            totalReturnAccumulated += inv.amount * (inv.rate / 100) * daysDiff
+            // Garantir que daysDiff seja pelo menos 0 para evitar NaN
+            const safeDaysDiff = Math.max(0, daysDiff)
+            totalReturnAccumulated += inv.amount * (rate / 100) * safeDaysDiff
           })
 
           setTotalInvested(total)
-          setDailyReturn(dailyReturnTotal)
-          setTotalReturn(totalReturnAccumulated)
+          setDailyReturn(dailyReturnTotal || 0) // Garantir que não seja NaN
+          setTotalReturn(totalReturnAccumulated || 0) // Garantir que não seja NaN
         }
       } catch (err) {
         console.error("Erro ao buscar dados:", err)
@@ -140,7 +146,6 @@ export default function InvestimentosPage() {
   useEffect(() => {
     setInvestmentAmountFormatted(investmentAmount === 0 ? "0,00" : formatCurrency(investmentAmount).replace("$", ""))
     setCalculatorAmountFormatted(formatCurrency(calculatorAmount).replace("$", ""))
-    setCalculatorRateFormatted(formatNumber(calculatorRate))
   }, [])
 
   const handleCopyAddress = () => {
@@ -196,44 +201,14 @@ export default function InvestimentosPage() {
     // Converte para número
     const numberValue = Number(numericValue)
 
-    // Garante que o valor não seja menor que 1
-    const finalValue = Math.max(1, numberValue)
+    // Garante que o valor não seja menor que 10
+    const finalValue = Math.max(10, numberValue)
 
     // Atualiza o estado com o valor numérico
     setCalculatorAmount(finalValue)
 
     // Formata o valor para exibição
     setCalculatorAmountFormatted(formatNumber(finalValue))
-  }
-
-  // Adicione um manipulador para o input da taxa de rendimento
-  const handleCalculatorRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-
-    // Se o valor estiver vazio, define como 4 (mínimo)
-    if (!value) {
-      setCalculatorRate(4)
-      setCalculatorRateFormatted("")
-      return
-    }
-
-    // Remove formatação para obter apenas os números
-    const numericValue = value
-      .replace(/\./g, "")
-      .replace(",", ".")
-      .replace(/[^\d.]/g, "")
-
-    // Converte para número
-    const numberValue = Number(numericValue)
-
-    // Garante que o valor esteja entre 4 e 10
-    const finalValue = Math.min(10, Math.max(4, numberValue))
-
-    // Atualiza o estado com o valor numérico
-    setCalculatorRate(finalValue)
-
-    // Formata o valor para exibição
-    setCalculatorRateFormatted(formatNumber(finalValue))
   }
 
   // Atualiza o valor formatado quando o slider muda
@@ -248,7 +223,7 @@ export default function InvestimentosPage() {
     const returns = []
 
     // Cálculo do rendimento diário fixo (sempre sobre o valor inicial)
-    const dailyReturn = calculatorAmount * (calculatorRate / 100)
+    const dailyReturn = calculatorAmount * 0.06 // 6% fixo
 
     for (let day = 1; day <= days; day++) {
       // O valor total é o valor inicial + (rendimento diário * número de dias)
@@ -268,10 +243,28 @@ export default function InvestimentosPage() {
     return returns
   }
 
-  // Função para processar o investimento após confirmação de pagamento
-  const handlePaymentConfirmed = async () => {
+  // Função para processar o investimento
+  const handleInvestment = async () => {
     try {
       setProcessing(true)
+
+      // Verificar se o valor é válido
+      if (investmentAmount < 10) {
+        toast({
+          title: "Erro",
+          description: "O valor mínimo de investimento é $10 USDT",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Verificar se o usuário tem saldo suficiente
+      if (userBalance < investmentAmount) {
+        // Se não tiver saldo suficiente, mostrar o QR code para depósito
+        setShowConfirmation(false)
+        setShowQRCode(true)
+        return
+      }
 
       // Obter a sessão atual
       const {
@@ -287,65 +280,120 @@ export default function InvestimentosPage() {
         return
       }
 
-      // Determinar a taxa de rendimento (entre 4% e 10%)
-      const rate = Math.floor(Math.random() * (10 - 4 + 1)) + 4
+      // Determinar a taxa de rendimento (6%)
+      const rate = 6
 
-      // 1. Criar o registro de depósito pendente
-      const { data: deposit, error: depositError } = await supabase
-        .from("deposits")
-        .insert({
+      try {
+        // 1. Criar o registro de investimento
+        const { data: investment, error: investmentError } = await supabase
+          .from("investments")
+          .insert({
+            user_id: session.user.id,
+            amount: investmentAmount,
+            rate: rate,
+            status: "active",
+          })
+          .select()
+          .single()
+
+        if (investmentError) {
+          console.error("Erro ao criar investimento:", investmentError)
+          throw new Error(`Erro ao criar investimento: ${investmentError.message}`)
+        }
+
+        // 2. Atualizar o saldo do usuário
+        const newBalance = userBalance - investmentAmount
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({ balance: newBalance })
+          .eq("id", session.user.id)
+
+        if (updateError) {
+          console.error("Erro ao atualizar saldo:", updateError)
+          throw new Error(`Erro ao atualizar saldo: ${updateError.message}`)
+        }
+
+        // 3. Registrar a transação
+        const { error: transactionError } = await supabase.from("transactions").insert({
           user_id: session.user.id,
           amount: investmentAmount,
-          status: "pending",
-          payment_method: "crypto",
-          notes: `Pagamento USDT (TRC20) para carteira ${walletAddress}`,
+          type: "investment",
+          description: `Investimento de ${formatCurrency(investmentAmount)} com rendimento de ${rate}% ao dia`,
+          status: "completed",
         })
-        .select()
-        .single()
 
-      if (depositError) {
-        throw new Error(`Erro ao criar depósito: ${depositError.message}`)
-      }
+        if (transactionError) {
+          console.error("Erro ao registrar transação:", transactionError)
+        }
 
-      // 2. Criar o registro de investimento pendente
-      const { data: investment, error: investmentError } = await supabase
-        .from("investments")
-        .insert({
-          user_id: session.user.id,
-          amount: investmentAmount,
-          rate: rate,
-          status: "pending",
+        // 4. Processar comissões de indicação
+        await processReferralCommission(
+          session.user.id,
+          investmentAmount,
+          `Investimento de ${formatCurrency(investmentAmount)}`,
+          supabase,
+        )
+
+        // Atualizar os estados
+        setUserBalance(newBalance)
+        setTotalInvested(totalInvested + investmentAmount)
+        setDailyReturn(dailyReturn + investmentAmount * (rate / 100))
+        setActiveInvestments([investment, ...activeInvestments])
+
+        // Mostrar mensagem de sucesso
+        toast({
+          title: "Sucesso",
+          description: `Investimento de ${formatCurrency(investmentAmount)} realizado com sucesso!`,
         })
-        .select()
-        .single()
 
-      if (investmentError) {
-        throw new Error(`Erro ao criar investimento: ${investmentError.message}`)
+        // Fechar o modal e resetar o valor
+        setShowConfirmation(false)
+        setInvestmentAmount(0)
+        setInvestmentAmountFormatted("0,00")
+      } catch (error: any) {
+        console.error("Erro na operação de investimento:", error)
+
+        // Verificar se o erro está relacionado à coluna 'rate'
+        if (error.message && error.message.includes("rate")) {
+          // Tentar criar o investimento sem a coluna rate
+          const { data: investment, error: investmentError } = await supabase
+            .from("investments")
+            .insert({
+              user_id: session.user.id,
+              amount: investmentAmount,
+              status: "active",
+            })
+            .select()
+            .single()
+
+          if (investmentError) {
+            throw new Error(`Erro ao criar investimento (tentativa alternativa): ${investmentError.message}`)
+          }
+
+          // Continuar com o fluxo normal se a inserção sem a coluna rate funcionar
+          const newBalance = userBalance - investmentAmount
+          await supabase.from("profiles").update({ balance: newBalance }).eq("id", session.user.id)
+
+          // Atualizar os estados
+          setUserBalance(newBalance)
+          setTotalInvested(totalInvested + investmentAmount)
+          setDailyReturn(dailyReturn + investmentAmount * 0.06)
+          setActiveInvestments([investment, ...activeInvestments])
+
+          // Mostrar mensagem de sucesso
+          toast({
+            title: "Sucesso",
+            description: `Investimento de ${formatCurrency(investmentAmount)} realizado com sucesso!`,
+          })
+
+          // Fechar o modal e resetar o valor
+          setShowConfirmation(false)
+          setInvestmentAmount(0)
+          setInvestmentAmountFormatted("0,00")
+        } else {
+          throw error // Re-lançar o erro se não for relacionado à coluna rate
+        }
       }
-
-      // 3. Registrar a transação
-      const { error: transactionError } = await supabase.from("transactions").insert({
-        user_id: session.user.id,
-        amount: investmentAmount,
-        type: "investment_pending",
-        description: `Investimento pendente de ${formatCurrency(investmentAmount)} com rendimento de ${rate}% ao dia`,
-        status: "pending",
-      })
-
-      if (transactionError) {
-        console.error("Erro ao registrar transação:", transactionError)
-      }
-
-      // Mostrar mensagem de sucesso
-      toast({
-        title: "Pagamento Registrado",
-        description: `Seu investimento de ${formatCurrency(investmentAmount)} será ativado após a confirmação do pagamento.`,
-      })
-
-      // Fechar o modal e resetar o valor
-      setShowQRCode(false)
-      setInvestmentAmount(0)
-      setInvestmentAmountFormatted("0,00")
     } catch (error: any) {
       console.error("Erro ao processar investimento:", error)
       toast({
@@ -355,6 +403,27 @@ export default function InvestimentosPage() {
       })
     } finally {
       setProcessing(false)
+    }
+  }
+
+  // Função para verificar se pode prosseguir com o investimento
+  const handleConfirmInvestment = () => {
+    if (investmentAmount < 10) {
+      toast({
+        title: "Erro",
+        description: "O valor mínimo de investimento é $10 USDT",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Verificar se o usuário tem saldo suficiente
+    if (userBalance < investmentAmount) {
+      // Se não tiver saldo suficiente, mostrar o QR code para depósito
+      setShowQRCode(true)
+    } else {
+      // Se tiver saldo suficiente, mostrar a confirmação
+      setShowConfirmation(true)
     }
   }
 
@@ -370,10 +439,23 @@ export default function InvestimentosPage() {
           percentReturn: 0,
         }
 
+  const handlePaymentConfirmed = () => {
+    setPaymentConfirmed(true)
+    // Fechar o modal após 3 segundos
+    setTimeout(() => {
+      setShowQRCode(false)
+      setPaymentConfirmed(false)
+      toast({
+        title: "Depósito em processamento",
+        description: "Seu depósito está sendo processado e será creditado em breve.",
+      })
+    }, 3000)
+  }
+
   // Modifique a parte que exibe o saldo disponível
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="sticky top-0 z-40 border-b border-blue-900/30 bg-black/80 backdrop-blur-xl md:flex hidden h-16 items-center">
+      <header className="sticky top-0 z-40 border-b border-green-900/30 bg-black/80 backdrop-blur-xl md:flex hidden h-16 items-center">
         <div className="container flex h-16 items-center justify-between py-4">
           <h1 className="text-xl font-bold">Investimentos</h1>
         </div>
@@ -382,18 +464,18 @@ export default function InvestimentosPage() {
       <div className="container py-4 md:py-6 px-4 md:px-6 space-y-6 md:space-y-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           <div className="lg:col-span-2 space-y-4 md:space-y-6">
-            <Card className="bg-black/40 border-blue-900/50">
+            <Card className="bg-black/40 border-green-900/50">
               <CardHeader className="p-4 md:p-6">
                 <CardTitle>Realizar Investimento</CardTitle>
-                <CardDescription>Invista a partir de $1 USDT e obtenha retornos diários de 4% a 10%.</CardDescription>
+                <CardDescription>Invista a partir de $10 USDT e obtenha retornos diários de 6%.</CardDescription>
               </CardHeader>
               <CardContent className="p-4 md:p-6 pt-0 md:pt-0">
                 <div className="space-y-4 md:space-y-6">
-                  <Alert className="bg-blue-500/10 border-blue-900/50 text-blue-400">
+                  <Alert className="bg-yellow-500/10 border-yellow-900/50 text-yellow-500">
                     <Info className="h-4 w-4" />
                     <AlertTitle>Informação</AlertTitle>
                     <AlertDescription>
-                      Investimento mínimo: $1 USDT. Investimento máximo: $20.000 USDT.
+                      Investimento mínimo: $10 USDT. Investimento máximo: $20.000 USDT.
                     </AlertDescription>
                   </Alert>
 
@@ -403,6 +485,7 @@ export default function InvestimentosPage() {
                         <label htmlFor="amount" className="text-sm font-medium">
                           Valor do Investimento (USDT)
                         </label>
+                        <span className="text-sm text-gray-400">Saldo disponível: {formatCurrency(userBalance)}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="relative flex-1">
@@ -411,10 +494,20 @@ export default function InvestimentosPage() {
                             id="amount"
                             value={investmentAmountFormatted}
                             onChange={handleInvestmentAmountChange}
-                            className="bg-black/50 border-blue-900/50 pl-8"
+                            className="bg-black/50 border-green-900/50 pl-8"
                             placeholder="0,00"
                           />
                         </div>
+                        <Button
+                          variant="outline"
+                          className="border-green-900/50 text-green-500 hover:bg-green-900/20"
+                          onClick={() => {
+                            setInvestmentAmount(userBalance)
+                            setInvestmentAmountFormatted(formatNumber(userBalance))
+                          }}
+                        >
+                          Máx
+                        </Button>
                       </div>
                     </div>
 
@@ -422,58 +515,47 @@ export default function InvestimentosPage() {
                       <label className="text-sm font-medium">Ajuste o valor</label>
                       <Slider
                         value={[investmentAmount]}
-                        min={1}
+                        min={10}
                         max={20000}
-                        step={1}
+                        step={10}
                         onValueChange={handleSliderChange}
                         className="py-4"
                       />
                       <div className="flex justify-between text-xs text-gray-400">
-                        <span>$1</span>
+                        <span>$10</span>
                         <span className="hidden sm:inline">$5.000</span>
                         <span className="hidden sm:inline">$10.000</span>
                         <span>$20.000</span>
                       </div>
                     </div>
 
-                    {investmentAmount > 0 && investmentAmount < 1 && (
+                    {investmentAmount > 0 && investmentAmount < 10 && (
                       <Alert className="bg-red-500/10 border-red-900/50 text-red-500 mt-2">
                         <AlertCircle className="h-4 w-4" />
                         <AlertTitle>Atenção</AlertTitle>
-                        <AlertDescription>O valor mínimo de investimento é $1 USDT.</AlertDescription>
+                        <AlertDescription>O valor mínimo de investimento é $10 USDT.</AlertDescription>
                       </Alert>
                     )}
 
                     <div className="pt-4 space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="bg-blue-500/10 border border-blue-900/50 rounded-lg p-4">
+                        <div className="bg-green-500/10 border border-green-900/50 rounded-lg p-4">
                           <p className="text-sm text-gray-400">Rendimento Diário Estimado</p>
-                          <p className="text-xl font-bold text-blue-400">{formatCurrency(investmentAmount * 0.04)}</p>
-                          <p className="text-xs text-gray-400">4% ao dia</p>
+                          <p className="text-xl font-bold text-green-500">{formatCurrency(investmentAmount * 0.06)}</p>
+                          <p className="text-xs text-gray-400">6% ao dia</p>
                         </div>
-                        <div className="bg-cyan-500/10 border border-cyan-900/50 rounded-lg p-4">
-                          <p className="text-sm text-gray-400">Rendimento Mensal Estimado</p>
-                          <p className="text-xl font-bold text-cyan-400">
-                            {formatCurrency(investmentAmount * 0.04 * 30)}
+                        <div className="bg-yellow-500/10 border border-yellow-900/50 rounded-lg p-4">
+                          <p className="text-sm text-gray-400">Rendimento em 20 dias úteis</p>
+                          <p className="text-xl font-bold text-yellow-500">
+                            {formatCurrency(investmentAmount * 0.06 * 20)}
                           </p>
-                          <p className="text-xs text-gray-400">120% ao mês</p>
+                          <p className="text-xs text-gray-400">120% em 20 dias úteis</p>
                         </div>
                       </div>
 
                       <Button
-                        className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-medium"
-                        onClick={() => {
-                          if (investmentAmount < 1) {
-                            toast({
-                              title: "Erro",
-                              description: "O valor mínimo de investimento é $1 USDT",
-                              variant: "destructive",
-                            })
-                            return
-                          }
-                          // Abrir diretamente o QR Code em vez da confirmação
-                          setShowQRCode(true)
-                        }}
+                        className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-medium"
+                        onClick={handleConfirmInvestment}
                       >
                         Confirmar Investimento
                       </Button>
@@ -483,10 +565,10 @@ export default function InvestimentosPage() {
               </CardContent>
             </Card>
 
-            <Card className="bg-black/40 border-blue-900/50">
+            <Card className="bg-black/40 border-green-900/50">
               <CardHeader className="p-4 md:p-6">
                 <CardTitle>Calculadora de Rendimentos</CardTitle>
-                <CardDescription>Simule seus rendimentos diários por até 30 dias.</CardDescription>
+                <CardDescription>Simule seus rendimentos diários por até 20 dias.</CardDescription>
               </CardHeader>
               <CardContent className="p-4 md:p-6 pt-0 md:pt-0">
                 <div className="space-y-4 md:space-y-6">
@@ -498,24 +580,23 @@ export default function InvestimentosPage() {
                         <Input
                           value={calculatorAmountFormatted}
                           onChange={handleCalculatorAmountChange}
-                          className="bg-black/50 border-blue-900/50 pl-8"
+                          className="bg-black/50 border-green-900/50 pl-8"
                           placeholder="Mínimo $10"
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Taxa Diária (%)</label>
+                      <label className="text-sm font-medium">Taxa Diária</label>
                       <div className="relative">
                         <Input
                           type="text"
-                          value={calculatorRateFormatted}
-                          onChange={handleCalculatorRateChange}
-                          className="bg-black/50 border-blue-900/50"
-                          placeholder="4,00 - 10,00"
+                          value="6,00"
+                          readOnly
+                          className="bg-black/50 border-green-900/50 opacity-80"
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
                       </div>
-                      <p className="text-xs text-gray-400">Taxa entre 4% e 10%</p>
+                      <p className="text-xs text-gray-400">Taxa fixa de 6% ao dia</p>
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Período (Dias)</label>
@@ -524,20 +605,24 @@ export default function InvestimentosPage() {
                         value={calculatorDays}
                         onChange={(e) => setCalculatorDays(Math.max(1, Number(e.target.value)))}
                         min={1}
-                        max={30}
-                        className="bg-black/50 border-blue-900/50"
+                        max={20}
+                        className="bg-black/50 border-green-900/50"
                       />
                     </div>
                   </div>
 
-                  <div className="bg-blue-500/10 border border-blue-900/50 rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-green-500/10 border border-green-900/50 rounded-lg p-4 space-y-4">
                     <div>
                       <p className="text-sm text-gray-400">Valor Final Estimado</p>
-                      <p className="text-2xl font-bold text-blue-400">{formatCurrency(finalReturn.amount)}</p>
+                      <p className="text-2xl font-bold text-green-500">
+                        {formatCurrency(calculatorAmount)} + {formatCurrency(finalReturn.totalReturn)} ={" "}
+                        {formatCurrency(finalReturn.amount)}
+                      </p>
+                      <p className="text-xs text-gray-400">Valor Inicial + Lucro Total = Valor Final</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Lucro Total</p>
-                      <p className="text-2xl font-bold text-blue-400">
+                      <p className="text-2xl font-bold text-green-500">
                         {formatCurrency(finalReturn.totalReturn)}{" "}
                         <span className="text-sm">(+{finalReturn.percentReturn.toFixed(2)}%)</span>
                       </p>
@@ -546,7 +631,7 @@ export default function InvestimentosPage() {
 
                   <Button
                     variant="outline"
-                    className="w-full border-blue-900/50 text-blue-400 hover:bg-blue-900/20"
+                    className="w-full border-green-900/50 text-green-500 hover:bg-green-900/20"
                     onClick={() => setShowCalculator(true)}
                   >
                     Ver Detalhes Diários
@@ -557,7 +642,7 @@ export default function InvestimentosPage() {
           </div>
 
           <div>
-            <Card className={`bg-black/40 border-blue-900/50 ${!isMobile ? "sticky top-24" : ""}`}>
+            <Card className={`bg-black/40 border-green-900/50 ${!isMobile ? "sticky top-24" : ""}`}>
               <CardHeader className="p-4 md:p-6">
                 <CardTitle>Meus Investimentos</CardTitle>
                 <CardDescription>Resumo dos seus investimentos ativos.</CardDescription>
@@ -566,33 +651,43 @@ export default function InvestimentosPage() {
                 <div className="space-y-4 md:space-y-6">
                   <div className="space-y-2">
                     <p className="text-sm text-gray-400">Total Investido</p>
-                    <p className="text-2xl font-bold text-cyan-400">{formatCurrency(totalInvested)}</p>
+                    <p className="text-2xl font-bold text-yellow-500">{formatCurrency(totalInvested)}</p>
                   </div>
 
                   <div className="space-y-2">
                     <p className="text-sm text-gray-400">Rendimento Acumulado</p>
-                    <p className="text-2xl font-bold text-blue-400">{formatCurrency(totalReturn)}</p>
+                    <p className="text-2xl font-bold text-green-500">
+                      {isNaN(totalReturn) ? formatCurrency(0) : formatCurrency(totalReturn)}
+                    </p>
                   </div>
 
                   <div className="space-y-2">
                     <p className="text-sm text-gray-400">Rendimento Diário Atual</p>
-                    <p className="text-2xl font-bold text-blue-400">{formatCurrency(dailyReturn)}</p>
+                    <p className="text-2xl font-bold text-green-500">
+                      {isNaN(dailyReturn) ? formatCurrency(0) : formatCurrency(dailyReturn)}
+                    </p>
                   </div>
 
-                  <div className="border-t border-blue-900/30 pt-4 mt-4">
+                  <div className="border-t border-green-900/30 pt-4 mt-4">
                     <p className="text-sm font-medium mb-2">Investimentos Ativos</p>
                     {activeInvestments.length > 0 ? (
                       <div className="space-y-3">
                         {activeInvestments.map((inv, index) => (
-                          <div key={index} className="bg-black/30 rounded-lg p-3 border border-blue-900/30">
+                          <div key={index} className="bg-black/30 rounded-lg p-3 border border-green-900/30">
                             <div className="flex justify-between items-center mb-1">
                               <p className="font-medium">{formatCurrency(inv.amount)}</p>
-                              <span className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full">
-                                {inv.rate}% ao dia
+                              <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded-full">
+                                {inv.rate || 6}% ao dia
                               </span>
                             </div>
                             <div className="flex justify-between text-xs text-gray-400">
-                              <span>Rendimento: {formatCurrency(inv.amount * (inv.rate / 100))} / dia</span>
+                              <span>
+                                Rendimento:{" "}
+                                {isNaN(inv.amount * ((inv.rate || 6) / 100))
+                                  ? formatCurrency(0)
+                                  : formatCurrency(inv.amount * ((inv.rate || 6) / 100))}{" "}
+                                / dia
+                              </span>
                               <span>{new Date(inv.created_at).toLocaleDateString()}</span>
                             </div>
                           </div>
@@ -611,11 +706,13 @@ export default function InvestimentosPage() {
 
       {/* Modal de QR Code para pagamento */}
       <Dialog open={showQRCode} onOpenChange={setShowQRCode}>
-        <DialogContent className="bg-black/90 border-blue-900/50 max-w-md p-4 md:p-6">
+        <DialogContent className="bg-black/90 border-green-900/50 max-w-md p-4 md:p-6 relative">
           <DialogHeader>
-            <DialogTitle>Realizar Investimento</DialogTitle>
+            <DialogTitle>Realizar Depósito</DialogTitle>
             <DialogDescription>
-              Envie exatamente {formatCurrency(investmentAmount)} USDT para o endereço abaixo.
+              {userBalance < investmentAmount
+                ? `Saldo insuficiente. Você precisa depositar pelo menos ${formatCurrency(investmentAmount - userBalance)} USDT.`
+                : `Envie exatamente ${formatCurrency(investmentAmount)} USDT para o endereço abaixo.`}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col items-center justify-center space-y-4">
@@ -631,38 +728,115 @@ export default function InvestimentosPage() {
             <div className="w-full">
               <p className="text-sm text-gray-400 mb-1">Endereço da Carteira (USDT - Rede TRC20)</p>
               <div className="flex items-center gap-2">
-                <div className="bg-black/50 border border-blue-900/50 rounded-lg p-2 text-sm text-gray-300 flex-1 overflow-hidden">
+                <div className="bg-black/50 border border-green-900/50 rounded-lg p-2 text-sm text-gray-300 flex-1 overflow-hidden">
                   <p className="truncate">{walletAddress}</p>
                 </div>
                 <Button
                   variant="outline"
                   size="icon"
-                  className="border-blue-900/50 text-blue-400 hover:bg-blue-900/20"
+                  className="border-green-900/50 text-green-500 hover:bg-green-900/20"
                   onClick={handleCopyAddress}
                 >
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
-            <Alert className="bg-blue-500/10 border-blue-900/50 text-blue-400">
+            <Alert className="bg-yellow-500/10 border-yellow-900/50 text-yellow-500">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Importante</AlertTitle>
               <AlertDescription>
-                Após realizar o pagamento, clique em "Já Realizei o Pagamento" para registrar seu investimento.
+                Após realizar o depósito, seu investimento será ativado em até 24 horas.
               </AlertDescription>
             </Alert>
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">
             <Button
               variant="outline"
-              className="border-blue-900/50 text-blue-400 hover:bg-blue-900/20 w-full sm:w-auto"
+              className="border-green-900/50 text-green-500 hover:bg-green-900/20 w-full sm:w-auto"
               onClick={() => setShowQRCode(false)}
+            >
+              Fechar
+            </Button>
+            <Button
+              className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-medium w-full sm:w-auto"
+              onClick={handlePaymentConfirmed}
+              disabled={paymentConfirmed}
+            >
+              {paymentConfirmed ? (
+                <>
+                  <Check className="h-5 w-5 mr-2" />
+                  Pagamento Confirmado!
+                </>
+              ) : (
+                "Já Realizei o Pagamento"
+              )}
+            </Button>
+          </DialogFooter>
+          {paymentConfirmed && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/70 rounded-lg z-10">
+              <div className="bg-green-500 rounded-full p-4 animate-pulse">
+                <Check className="h-16 w-16 text-black" />
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de confirmação de investimento */}
+      <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
+        <DialogContent className="bg-black/90 border-green-900/50 max-w-md p-4 md:p-6">
+          <DialogHeader>
+            <DialogTitle>Confirmar Investimento</DialogTitle>
+            <DialogDescription>
+              Você está prestes a investir {formatCurrency(investmentAmount)} do seu saldo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Alert className="bg-green-500/10 border-green-900/50 text-green-500">
+              <Info className="h-4 w-4" />
+              <AlertTitle>Informação</AlertTitle>
+              <AlertDescription>
+                Seu investimento começará a gerar rendimentos diários de 6% imediatamente.
+              </AlertDescription>
+            </Alert>
+
+            <div className="bg-black/50 border border-green-900/50 rounded-lg p-4">
+              <p className="text-sm text-gray-400 mb-2">Detalhes do Investimento</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-xs text-gray-400">Valor</p>
+                  <p className="font-medium">{formatCurrency(investmentAmount)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Taxa</p>
+                  <p className="font-medium">6% ao dia</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Rendimento Diário</p>
+                  <p className="font-medium text-green-500">{formatCurrency(investmentAmount * 0.06)} / dia</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Total em 20 dias úteis</p>
+                  <p className="font-medium text-green-500">
+                    {formatCurrency(investmentAmount)} + {formatCurrency(investmentAmount * 0.06 * 20)} ={" "}
+                    {formatCurrency(investmentAmount + investmentAmount * 0.06 * 20)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">
+            <Button
+              variant="outline"
+              className="border-green-900/50 text-green-500 hover:bg-green-900/20 w-full sm:w-auto"
+              onClick={() => setShowConfirmation(false)}
+              disabled={processing}
             >
               Cancelar
             </Button>
             <Button
-              className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-medium w-full sm:w-auto"
-              onClick={handlePaymentConfirmed}
+              className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-medium w-full sm:w-auto"
+              onClick={handleInvestment}
               disabled={processing}
             >
               {processing ? (
@@ -671,7 +845,7 @@ export default function InvestimentosPage() {
                   Processando...
                 </>
               ) : (
-                "Já Realizei o Pagamento"
+                "Confirmar Investimento"
               )}
             </Button>
           </DialogFooter>
@@ -680,19 +854,19 @@ export default function InvestimentosPage() {
 
       {/* Modal da calculadora detalhada */}
       <Dialog open={showCalculator} onOpenChange={setShowCalculator}>
-        <DialogContent className="bg-black/90 border-blue-900/50 max-w-3xl p-4 md:p-6">
+        <DialogContent className="bg-black/90 border-green-900/50 max-w-3xl p-4 md:p-6">
           <DialogHeader>
             <DialogTitle>Detalhes de Rendimento Diário</DialogTitle>
             <DialogDescription>
-              Simulação de rendimento para {formatCurrency(calculatorAmount)} USDT a {calculatorRate}% ao dia por{" "}
-              {calculatorDays} dias.
+              Simulação de rendimento para {formatCurrency(calculatorAmount)} USDT a 6% ao dia por {calculatorDays}{" "}
+              dias.
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[300px] md:max-h-[400px] overflow-y-auto mt-4">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="border-b border-blue-900/30">
+                  <tr className="border-b border-green-900/30">
                     <th className="py-2 px-2 md:px-4 text-left text-sm font-medium text-gray-400">Dia</th>
                     <th className="py-2 px-2 md:px-4 text-left text-sm font-medium text-gray-400">Saldo</th>
                     <th className="py-2 px-2 md:px-4 text-left text-sm font-medium text-gray-400">Rendimento</th>
@@ -702,12 +876,15 @@ export default function InvestimentosPage() {
                 </thead>
                 <tbody>
                   {returns.map((item) => (
-                    <tr key={item.day} className="border-b border-blue-900/30 last:border-0">
+                    <tr key={item.day} className="border-b border-green-900/30 last:border-0">
                       <td className="py-2 px-2 md:px-4 text-sm">{item.day}</td>
-                      <td className="py-2 px-2 md:px-4 text-sm text-cyan-400">{formatCurrency(item.amount)}</td>
-                      <td className="py-2 px-2 md:px-4 text-sm text-blue-400">+{formatCurrency(item.dailyReturn)}</td>
-                      <td className="py-2 px-2 md:px-4 text-sm text-blue-400">{formatCurrency(item.totalReturn)}</td>
-                      <td className="py-2 px-2 md:px-4 text-sm text-blue-400">+{item.percentReturn.toFixed(2)}%</td>
+                      <td className="py-2 px-2 md:px-4 text-sm text-yellow-500">
+                        {formatCurrency(calculatorAmount)} + {formatCurrency(item.totalReturn)} ={" "}
+                        {formatCurrency(item.amount)}
+                      </td>
+                      <td className="py-2 px-2 md:px-4 text-sm text-green-500">+{formatCurrency(item.dailyReturn)}</td>
+                      <td className="py-2 px-2 md:px-4 text-sm text-green-500">{formatCurrency(item.totalReturn)}</td>
+                      <td className="py-2 px-2 md:px-4 text-sm text-green-500">+{item.percentReturn.toFixed(2)}%</td>
                     </tr>
                   ))}
                 </tbody>
@@ -716,7 +893,7 @@ export default function InvestimentosPage() {
           </div>
           <DialogFooter className="mt-4">
             <Button
-              className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-medium"
+              className="w-full sm:w-auto bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-medium"
               onClick={() => setShowCalculator(false)}
             >
               Fechar

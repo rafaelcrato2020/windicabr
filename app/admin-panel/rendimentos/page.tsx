@@ -5,10 +5,10 @@ import { createBrowserClient } from "@/utils/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 
 export default function YieldsPage() {
-  const [rate, setRate] = useState(4)
   const [processing, setProcessing] = useState(false)
   const [yieldHistory, setYieldHistory] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [userCount, setUserCount] = useState(0)
   const supabase = createBrowserClient()
   const { toast } = useToast()
 
@@ -52,7 +52,26 @@ export default function YieldsPage() {
       }
     }
 
+    async function fetchUserCount() {
+      try {
+        const { data, error } = await supabase
+          .from("investments")
+          .select("user_id")
+          .eq("status", "active")
+          .is("amount", "not.null")
+
+        if (error) throw error
+
+        // Contar usuários únicos com investimentos ativos
+        const uniqueUsers = new Set(data.map((item) => item.user_id))
+        setUserCount(uniqueUsers.size)
+      } catch (error) {
+        console.error("Erro ao buscar contagem de usuários:", error)
+      }
+    }
+
     fetchYieldHistory()
+    fetchUserCount()
   }, [supabase, processing])
 
   // Verificar se a tabela available_earnings existe
@@ -81,15 +100,144 @@ export default function YieldsPage() {
     }
   }
 
-  const handlePayYields = async () => {
-    if (rate < 1 || rate > 10) {
-      toast({
-        title: "Erro",
-        description: "A taxa de rendimento deve estar entre 1% e 10%",
-        variant: "destructive",
-      })
-      return
+  // Função para atualizar o progresso do ciclo de 20 dias úteis
+  const updateCycleProgress = async (userId: string) => {
+    try {
+      // Verificar se a tabela bot_daily_performance existe
+      const { data: tableExists, error: tableCheckError } = await supabase
+        .from("information_schema.tables")
+        .select("table_name")
+        .eq("table_schema", "public")
+        .eq("table_name", "bot_daily_performance")
+        .single()
+
+      if (tableCheckError || !tableExists) {
+        console.log("Tabela bot_daily_performance não existe. Criando...")
+
+        // Criar a tabela se não existir
+        await supabase.rpc("exec_sql", {
+          sql_query: `
+            CREATE TABLE IF NOT EXISTS public.bot_daily_performance (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+              daily_profit DECIMAL(15, 2) DEFAULT 0,
+              daily_profit_percentage DECIMAL(5, 2) DEFAULT 0,
+              total_trades INTEGER DEFAULT 0,
+              successful_trades INTEGER DEFAULT 0,
+              failed_trades INTEGER DEFAULT 0,
+              completed_days INTEGER DEFAULT 0
+            );
+          `,
+        })
+      }
+
+      // Verificar se já existe um registro para hoje
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      const { data: existingRecord, error: recordError } = await supabase
+        .from("bot_daily_performance")
+        .select("*")
+        .gte("date", today.toISOString())
+        .single()
+
+      if (recordError && recordError.code !== "PGRST116") {
+        console.error("Erro ao verificar registro de desempenho diário:", recordError)
+        return
+      }
+
+      // Verificar se a tabela user_cycle_progress existe
+      const { data: cycleTableExists, error: cycleTableCheckError } = await supabase
+        .from("information_schema.tables")
+        .select("table_name")
+        .eq("table_schema", "public")
+        .eq("table_name", "user_cycle_progress")
+        .single()
+
+      if (cycleTableCheckError || !cycleTableExists) {
+        console.log("Tabela user_cycle_progress não existe. Criando...")
+
+        // Criar a tabela se não existir
+        await supabase.rpc("exec_sql", {
+          sql_query: `
+            CREATE TABLE IF NOT EXISTS public.user_cycle_progress (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id UUID REFERENCES auth.users(id),
+              cycle_progress DECIMAL(5, 2) DEFAULT 0,
+              days_completed INTEGER DEFAULT 0,
+              last_goal_date DATE,
+              completed_business_days TEXT[] DEFAULT '{}',
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+              updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+          `,
+        })
+      }
+
+      // Verificar se o usuário já tem um registro de progresso
+      const { data: userProgress, error: userProgressError } = await supabase
+        .from("user_cycle_progress")
+        .select("*")
+        .eq("user_id", userId)
+        .single()
+
+      const todayStr = today.toISOString().split("T")[0] // Formato YYYY-MM-DD
+
+      if (userProgressError && userProgressError.code !== "PGRST116") {
+        // Criar um novo registro para o usuário
+        await supabase.from("user_cycle_progress").insert({
+          user_id: userId,
+          cycle_progress: 6, // 6% de progresso
+          days_completed: 1, // Primeiro dia completado
+          last_goal_date: todayStr,
+          completed_business_days: [todayStr],
+        })
+      } else if (userProgress) {
+        // Verificar se já atingiu a meta hoje
+        if (!userProgress.completed_business_days.includes(todayStr)) {
+          // Atualizar o progresso existente
+          const newProgress = Math.min(userProgress.cycle_progress + 6, 120) // Limitar a 120%
+          const newDaysCompleted = Math.min(userProgress.days_completed + 1, 20) // Limitar a 20 dias
+          const newCompletedDays = [...userProgress.completed_business_days, todayStr]
+
+          await supabase
+            .from("user_cycle_progress")
+            .update({
+              cycle_progress: newProgress,
+              days_completed: newDaysCompleted,
+              last_goal_date: todayStr,
+              completed_business_days: newCompletedDays,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", userProgress.id)
+        }
+      }
+
+      // Atualizar o status do bot
+      if (existingRecord) {
+        // Atualizar o registro existente
+        await supabase
+          .from("bot_daily_performance")
+          .update({
+            daily_profit_percentage: 6, // 6% fixo
+            completed_days: (existingRecord.completed_days || 0) + 1,
+          })
+          .eq("id", existingRecord.id)
+      } else {
+        // Criar um novo registro
+        await supabase.from("bot_daily_performance").insert({
+          daily_profit_percentage: 6, // 6% fixo
+          completed_days: 1,
+        })
+      }
+    } catch (error) {
+      console.error("Erro ao atualizar progresso do ciclo:", error)
     }
+  }
+
+  const handlePayYields = async () => {
+    // Taxa fixa de 6%
+    const fixedRate = 6
 
     setProcessing(true)
 
@@ -97,47 +245,84 @@ export default function YieldsPage() {
       // Verificar e criar a tabela available_earnings se necessário
       await checkAndCreateAvailableEarningsTable()
 
-      // Buscar apenas usuários com saldo disponível
-      const { data: users, error: usersError } = await supabase
-        .from("profiles")
-        .select("id, name, email, balance")
-        .gt("balance", 0)
+      // Buscar usuários com investimentos ativos
+      const { data: investments, error: investmentsError } = await supabase
+        .from("investments")
+        .select("user_id, amount")
+        .eq("status", "active")
+        .is("amount", "not.null")
 
-      if (usersError) {
-        console.error("Erro ao buscar usuários:", usersError)
-        throw usersError
+      if (investmentsError) {
+        console.error("Erro ao buscar investimentos:", investmentsError)
+        throw investmentsError
       }
 
-      if (!users || users.length === 0) {
+      if (!investments || investments.length === 0) {
         toast({
           title: "Aviso",
-          description: "Nenhum usuário com saldo disponível encontrado",
+          description: "Nenhum investimento ativo encontrado",
           variant: "default",
         })
         setProcessing(false)
         return
       }
 
-      // Calcular e pagar rendimentos para cada usuário com saldo
+      // Agrupar investimentos por usuário
+      const userInvestments: Record<string, number> = {}
+      investments.forEach((inv) => {
+        const userId = inv.user_id
+        const amount = Number(inv.amount) || 0
+
+        if (!userInvestments[userId]) {
+          userInvestments[userId] = 0
+        }
+
+        userInvestments[userId] += amount
+      })
+
+      // Calcular e pagar rendimentos para cada usuário com investimentos
       let successCount = 0
       let errorCount = 0
       let totalPaid = 0
       const currentDate = new Date().toISOString()
+      const processedUsers = new Set<string>()
 
-      for (const user of users) {
+      for (const userId in userInvestments) {
         try {
-          // Calcular rendimento baseado apenas no saldo disponível
-          const yieldAmount = (user.balance * rate) / 100
+          // Evitar processar o mesmo usuário mais de uma vez
+          if (processedUsers.has(userId)) continue
+          processedUsers.add(userId)
+
+          const investedAmount = userInvestments[userId]
+
+          // Calcular rendimento baseado no valor investido
+          const yieldAmount = (investedAmount * fixedRate) / 100
 
           if (yieldAmount <= 0) continue
 
+          // Buscar o perfil do usuário
+          const { data: profileData, error: profileError } = await supabase
+            .from("profiles")
+            .select("balance")
+            .eq("id", userId)
+            .single()
+
+          if (profileError) {
+            console.error("Erro ao buscar perfil do usuário:", profileError)
+            errorCount++
+            continue
+          }
+
           // Atualizar saldo do usuário
+          const newBalance = (profileData.balance || 0) + yieldAmount
           const { error: updateError } = await supabase
             .from("profiles")
             .update({
-              balance: user.balance + yieldAmount,
+              balance: newBalance,
+              last_yield_date: currentDate,
+              last_yield_rate: fixedRate,
             })
-            .eq("id", user.id)
+            .eq("id", userId)
 
           if (updateError) {
             console.error("Erro ao atualizar saldo do usuário:", updateError)
@@ -147,7 +332,7 @@ export default function YieldsPage() {
 
           // Registrar o rendimento disponível para saque
           const { error: availableEarningsError } = await supabase.from("available_earnings").insert({
-            user_id: user.id,
+            user_id: userId,
             amount: yieldAmount,
             is_withdrawn: false,
           })
@@ -156,26 +341,12 @@ export default function YieldsPage() {
             console.error("Erro ao registrar rendimento disponível:", availableEarningsError)
           }
 
-          // Tentar atualizar as colunas de rendimento, mas não falhar se elas não existirem
-          try {
-            await supabase
-              .from("profiles")
-              .update({
-                last_yield_date: currentDate,
-                last_yield_rate: rate,
-              })
-              .eq("id", user.id)
-          } catch (columnError) {
-            console.warn("Aviso: Não foi possível atualizar colunas de rendimento:", columnError)
-            // Não interromper o processo se essas colunas não existirem
-          }
-
           // Registrar transação de rendimento
           const { error: transactionError } = await supabase.from("transactions").insert({
-            user_id: user.id,
+            user_id: userId,
             amount: yieldAmount,
             type: "yield",
-            description: `Rendimento diário de ${rate}% sobre saldo`,
+            description: `Rendimento diário de ${fixedRate}% sobre investimento`,
             status: "completed",
           })
 
@@ -183,25 +354,8 @@ export default function YieldsPage() {
             console.error("Erro ao registrar transação:", transactionError)
             errorCount++
           } else {
-            // Registrar também na tabela yields para manter consistência
-            try {
-              const { error: yieldError } = await supabase
-                .from("yields")
-                .insert({
-                  user_id: user.id,
-                  amount: yieldAmount,
-                  percentage: rate,
-                  status: "completed",
-                  paid_at: currentDate,
-                })
-                .single()
-
-              if (yieldError && !yieldError.message.includes("does not exist")) {
-                console.error("Erro ao registrar yield:", yieldError)
-              }
-            } catch (yieldTableError) {
-              console.warn("Aviso: Tabela yields pode não existir:", yieldTableError)
-            }
+            // Atualizar o progresso do ciclo de 20 dias úteis
+            await updateCycleProgress(userId)
 
             successCount++
             totalPaid += yieldAmount
@@ -212,9 +366,33 @@ export default function YieldsPage() {
         }
       }
 
+      // Atualizar o status do bot para indicar que a meta diária foi atingida
+      try {
+        // Verificar se a tabela bot_global_config existe
+        const { data: configTableExists, error: configTableCheckError } = await supabase
+          .from("information_schema.tables")
+          .select("table_name")
+          .eq("table_schema", "public")
+          .eq("table_name", "bot_global_config")
+          .single()
+
+        if (!configTableCheckError && configTableExists) {
+          // Atualizar o status do bot
+          await supabase
+            .from("bot_global_config")
+            .update({
+              last_yield_date: currentDate,
+              daily_target_reached: true,
+            })
+            .eq("id", 1) // Assumindo que há apenas um registro de configuração global
+        }
+      } catch (botStatusError) {
+        console.error("Erro ao atualizar status do bot:", botStatusError)
+      }
+
       toast({
         title: "Rendimentos Pagos",
-        description: `Rendimentos pagos com sucesso para ${successCount} usuários com saldo. Total: $ ${totalPaid.toFixed(2)}. Falhas: ${errorCount}`,
+        description: `Rendimentos de 6% pagos com sucesso para ${successCount} usuários com investimentos. Total: $ ${totalPaid.toFixed(2)}. Falhas: ${errorCount}`,
         variant: "default",
       })
     } catch (error) {
@@ -239,17 +417,17 @@ export default function YieldsPage() {
 
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-300 mb-2">Taxa de Rendimento (%)</label>
-            <input
-              type="number"
-              min="1"
-              max="10"
-              value={rate}
-              onChange={(e) => setRate(Number(e.target.value))}
-              className="w-full p-3 bg-gray-700 border border-gray-600 rounded-md text-white"
-            />
+            <div className="w-full p-3 bg-gray-700 border border-gray-600 rounded-md text-white">6%</div>
             <p className="mt-2 text-sm text-gray-400">
-              Defina a taxa de rendimento diário entre 1% e 10% para todos os usuários com saldo disponível.
+              Taxa de rendimento diário fixa de 6% para todos os usuários com investimentos ativos.
             </p>
+          </div>
+
+          <div className="mb-6 p-4 bg-gray-700 rounded-md">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-300">Usuários com investimentos ativos:</span>
+              <span className="text-lg font-bold text-green-400">{userCount}</span>
+            </div>
           </div>
 
           <button
@@ -270,9 +448,10 @@ export default function YieldsPage() {
           <div className="mt-6 p-4 bg-gray-700 rounded-md">
             <h3 className="text-sm font-medium text-yellow-400 mb-2">Importante</h3>
             <p className="text-sm text-gray-300">
-              Esta ação irá calcular e pagar rendimentos apenas para usuários com saldo disponível. O valor será
-              calculado com base na taxa definida e adicionado ao saldo disponível de cada usuário. Esta operação não
-              pode ser desfeita.
+              Esta ação irá calcular e pagar rendimentos apenas para usuários com investimentos ativos. O valor será
+              calculado com base na taxa fixa de 6% e adicionado ao saldo disponível de cada usuário. Esta operação
+              também atualizará o progresso do ciclo de 20 dias úteis e o status do bot. Esta operação não pode ser
+              desfeita.
             </p>
           </div>
         </div>

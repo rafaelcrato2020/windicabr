@@ -119,9 +119,9 @@ export default function AdminSidebar() {
         } lg:translate-x-0`}
       >
         <div className="p-4">
-          <h1 className="text-2xl font-bold text-green-500">
-            WINDICABR <span className="text-yellow-500">Admin</span>
-          </h1>
+          <Link href="/admin-panel" className="text-2xl font-bold text-green-500">
+            FOREXITY <span className="text-yellow-500">Admin</span>
+          </Link>
         </div>
 
         <nav className="mt-6">

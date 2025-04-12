@@ -8,14 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import { createBrowserClient } from "@/utils/supabase/client"
 
@@ -114,7 +106,6 @@ interface Affiliate {
 
 export default function AfiliadosPage() {
   const [activeTab, setActiveTab] = useState("level1")
-  const [showCalculator, setShowCalculator] = useState(false)
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -433,18 +424,14 @@ export default function AfiliadosPage() {
     // Garantir que os valores não sejam negativos
     const safeLevel1Count = Math.max(0, level1Count)
     const safeLevel1Amount = Math.max(0, level1Amount)
-    const safeLevel2Count = Math.max(0, level2Count)
-    const safeLevel2Amount = Math.max(0, level2Amount)
-    const safeLevel3Count = Math.max(0, level3Count)
-    const safeLevel3Amount = Math.max(0, level3Amount)
-    const safeLevel4Count = Math.max(0, level4Count)
-    const safeLevel4Amount = Math.max(0, level4Amount)
 
-    // Calcular os ganhos para cada nível
+    // Calcular os ganhos para o nível 1
     const level1Earnings = safeLevel1Count * safeLevel1Amount * 0.1
-    const level2Earnings = safeLevel2Count * safeLevel2Amount * 0.05
-    const level3Earnings = safeLevel3Count * safeLevel3Amount * 0.03
-    const level4Earnings = safeLevel4Count * safeLevel4Amount * 0.02
+
+    // Estimar os outros níveis com base no nível 1
+    const level2Earnings = level1Earnings * 0.5
+    const level3Earnings = level1Earnings * 0.3
+    const level4Earnings = level1Earnings * 0.2
 
     const totalEarnings = level1Earnings + level2Earnings + level3Earnings + level4Earnings
 
@@ -600,158 +587,64 @@ export default function AfiliadosPage() {
         <Card className="bg-black/40 border-green-900/50">
           <CardHeader>
             <CardTitle>Calculadora de Ganhos</CardTitle>
-            <CardDescription>Simule seus ganhos com o programa de afiliados em todos os níveis.</CardDescription>
+            <CardDescription>Simule seus ganhos com o programa de afiliados.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Nível 1 (10%)</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Número de Afiliados</label>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Número de Afiliados Diretos</label>
+                    <Input
+                      type="text"
+                      value={formatNumber(level1Count)}
+                      onChange={handleLevel1CountChange}
+                      className="bg-black/50 border-green-900/50"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Valor Médio Investido ($)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
                       <Input
                         type="text"
-                        value={formatNumber(level1Count)}
-                        onChange={handleLevel1CountChange}
-                        className="bg-black/50 border-green-900/50"
+                        value={formatNumber(level1Amount)}
+                        onChange={handleLevel1AmountChange}
+                        className="bg-black/50 border-green-900/50 pl-8"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Valor Médio Investido ($)</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
-                        <Input
-                          type="text"
-                          value={formatNumber(level1Amount)}
-                          onChange={handleLevel1AmountChange}
-                          className="bg-black/50 border-green-900/50 pl-8"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-green-500/10 border border-green-900/50 rounded-lg p-4">
-                    <p className="text-sm text-gray-400">Ganhos Estimados (Nível 1)</p>
-                    <p className="text-xl font-bold text-green-500">${earnings.level1.toFixed(2)}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Nível 2 (5%)</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Número de Afiliados</label>
-                      <Input
-                        type="text"
-                        value={formatNumber(level2Count)}
-                        onChange={handleLevel2CountChange}
-                        className="bg-black/50 border-green-900/50"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Valor Médio Investido ($)</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
-                        <Input
-                          type="text"
-                          value={formatNumber(level2Amount)}
-                          onChange={handleLevel2AmountChange}
-                          className="bg-black/50 border-green-900/50 pl-8"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-yellow-500/10 border border-yellow-900/50 rounded-lg p-4">
-                    <p className="text-sm text-gray-400">Ganhos Estimados (Nível 2)</p>
-                    <p className="text-xl font-bold text-yellow-500">${earnings.level2.toFixed(2)}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Nível 3 (3%)</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Número de Afiliados</label>
-                      <Input
-                        type="text"
-                        value={formatNumber(level3Count)}
-                        onChange={handleLevel3CountChange}
-                        className="bg-black/50 border-green-900/50"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Valor Médio Investido ($)</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
-                        <Input
-                          type="text"
-                          value={formatNumber(level3Amount)}
-                          onChange={handleLevel3AmountChange}
-                          className="bg-black/50 border-green-900/50 pl-8"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-red-500/10 border border-red-900/50 rounded-lg p-4">
-                    <p className="text-sm text-gray-400">Ganhos Estimados (Nível 3)</p>
-                    <p className="text-xl font-bold text-red-500">${earnings.level3.toFixed(2)}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Nível 4 (2%)</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Número de Afiliados</label>
-                      <Input
-                        type="text"
-                        value={formatNumber(level4Count)}
-                        onChange={handleLevel4CountChange}
-                        className="bg-black/50 border-green-900/50"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Valor Médio Investido ($)</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
-                        <Input
-                          type="text"
-                          value={formatNumber(level4Amount)}
-                          onChange={handleLevel4AmountChange}
-                          className="bg-black/50 border-green-900/50 pl-8"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-purple-500/10 border border-purple-900/50 rounded-lg p-4">
-                    <p className="text-sm text-gray-400">Ganhos Estimados (Nível 4)</p>
-                    <p className="text-xl font-bold text-purple-500">${earnings.level4.toFixed(2)}</p>
                   </div>
                 </div>
               </div>
 
               <div className="bg-gradient-to-r from-green-500/20 to-yellow-500/20 border border-green-900/50 rounded-lg p-6">
-                <div className="flex items-center justify-between">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
+                    <p className="text-sm text-gray-400">Nível 1 (10%)</p>
+                    <p className="text-xl font-bold text-green-500">${earnings.level1.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">Nível 2 (5%)</p>
+                    <p className="text-xl font-bold text-yellow-500">${(earnings.level1 * 0.5).toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">Nível 3 (3%)</p>
+                    <p className="text-xl font-bold text-red-500">${(earnings.level1 * 0.3).toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">Nível 4 (2%)</p>
+                    <p className="text-xl font-bold text-purple-500">${(earnings.level1 * 0.2).toFixed(2)}</p>
+                  </div>
+                </div>
+                <div className="mt-4 pt-4 border-t border-green-900/30">
+                  <div className="flex items-center justify-between">
                     <p className="text-lg font-medium text-white">Ganhos Totais Estimados</p>
-                    <p className="text-sm text-gray-400">
-                      Com {level1Count + level2Count + level3Count + level4Count} afiliados em todos os níveis
+                    <p className="text-2xl font-bold bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 text-transparent bg-clip-text">
+                      ${(earnings.level1 * 2).toFixed(2)}
                     </p>
                   </div>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 text-transparent bg-clip-text">
-                    ${earnings.total.toFixed(2)}
-                  </p>
                 </div>
               </div>
-
-              <Button
-                className="w-full bg-gradient-to-r from-green-600 to-yellow-500 hover:from-green-700 hover:to-yellow-600 text-black font-medium"
-                onClick={() => setShowCalculator(true)}
-              >
-                Ver Detalhes Completos
-              </Button>
             </div>
           </CardContent>
         </Card>
@@ -922,153 +815,6 @@ export default function AfiliadosPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Modal da calculadora detalhada */}
-      <Dialog open={showCalculator} onOpenChange={setShowCalculator}>
-        <DialogContent className="bg-black/90 border-green-900/50 max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Detalhes de Ganhos de Afiliados</DialogTitle>
-            <DialogDescription>
-              Simulação completa de ganhos com o programa de afiliados em todos os níveis.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <h3 className="font-semibold text-white">Nível 1 (10%)</h3>
-                <div className="bg-green-500/10 border border-green-900/50 rounded-lg p-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-400">Afiliados</p>
-                      <p className="text-lg font-bold text-white">{level1Count}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Investimento Médio</p>
-                      <p className="text-lg font-bold text-yellow-500">${level1Amount.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Investimento Total</p>
-                      <p className="text-lg font-bold text-yellow-500">${(level1Count * level1Amount).toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Comissão (10%)</p>
-                      <p className="text-lg font-bold text-green-500">${earnings.level1.toFixed(2)}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="font-semibold text-white">Nível 2 (5%)</h3>
-                <div className="bg-yellow-500/10 border border-yellow-900/50 rounded-lg p-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-400">Afiliados</p>
-                      <p className="text-lg font-bold text-white">{level2Count}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Investimento Médio</p>
-                      <p className="text-lg font-bold text-yellow-500">${level2Amount.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Investimento Total</p>
-                      <p className="text-lg font-bold text-yellow-500">${(level2Count * level2Amount).toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Comissão (5%)</p>
-                      <p className="text-lg font-bold text-yellow-500">${earnings.level2.toFixed(2)}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <h3 className="font-semibold text-white">Nível 3 (3%)</h3>
-                <div className="bg-red-500/10 border border-red-900/50 rounded-lg p-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-400">Afiliados</p>
-                      <p className="text-lg font-bold text-white">{level3Count}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Investimento Médio</p>
-                      <p className="text-lg font-bold text-yellow-500">${level3Amount.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Investimento Total</p>
-                      <p className="text-lg font-bold text-yellow-500">${(level3Count * level3Amount).toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Comissão (3%)</p>
-                      <p className="text-lg font-bold text-red-500">${earnings.level3.toFixed(2)}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="font-semibold text-white">Nível 4 (2%)</h3>
-                <div className="bg-purple-500/10 border border-purple-900/50 rounded-lg p-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-400">Afiliados</p>
-                      <p className="text-lg font-bold text-white">{level4Count}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Investimento Médio</p>
-                      <p className="text-lg font-bold text-yellow-500">${level4Amount.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Investimento Total</p>
-                      <p className="text-lg font-bold text-yellow-500">${(level4Count * level4Amount).toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Comissão (2%)</p>
-                      <p className="text-lg font-bold text-purple-500">${earnings.level4.toFixed(2)}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-r from-green-500/20 to-yellow-500/20 border border-green-900/50 rounded-lg p-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                  <p className="text-lg font-medium text-white">Resumo Total</p>
-                  <p className="text-sm text-gray-400">
-                    Total de {level1Count + level2Count + level3Count + level4Count} afiliados em 4 níveis
-                  </p>
-                  <p className="text-sm text-gray-400 mt-1">
-                    Investimento total: $
-                    {(
-                      level1Count * level1Amount +
-                      level2Count * level2Amount +
-                      level3Count * level3Amount +
-                      level4Count * level4Amount
-                    ).toFixed(2)}
-                  </p>
-                </div>
-                <div className="text-center md:text-right">
-                  <p className="text-sm text-gray-400">Ganhos Totais Estimados</p>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 text-transparent bg-clip-text">
-                    ${earnings.total.toFixed(2)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              className="bg-gradient-to-r from-green-600 to-yellow-500 hover:from-green-700 hover:to-yellow-600 text-black font-medium"
-              onClick={() => setShowCalculator(false)}
-            >
-              Fechar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

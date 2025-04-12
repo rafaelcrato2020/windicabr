@@ -161,12 +161,12 @@ export default function LoginPage() {
       <header className="w-full border-b bg-black/50 backdrop-blur-xl">
         <div className="container flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <Zap className="h-6 w-6 text-blue-500" />
-            <span className="text-xl font-bold bg-gradient-to-r from-blue-500 via-blue-400 to-blue-600 text-transparent bg-clip-text">
-              WINDICABR
+            <Zap className="h-6 w-6 text-yellow-500" />
+            <span className="text-xl font-bold bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 text-transparent bg-clip-text">
+              FOREXITY
             </span>
           </Link>
-          <Link href="/" className="text-sm font-medium text-white hover:text-blue-500 flex items-center gap-1">
+          <Link href="/" className="text-sm font-medium text-white hover:text-yellow-500 flex items-center gap-1">
             <ArrowLeft className="h-4 w-4" />
             Voltar
           </Link>
@@ -177,28 +177,28 @@ export default function LoginPage() {
       <main className="flex-1 flex items-center justify-center p-4 md:p-8 relative">
         {/* Background Elements */}
         <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-0 left-1/4 w-1/2 h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
-          <div className="absolute bottom-0 left-1/4 w-1/2 h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
-          <div className="absolute top-1/4 left-0 h-1/2 w-px bg-gradient-to-b from-transparent via-blue-500 to-transparent" />
-          <div className="absolute top-1/4 right-0 h-1/2 w-px bg-gradient-to-b from-transparent via-blue-500 to-transparent" />
+          <div className="absolute top-0 left-1/4 w-1/2 h-px bg-gradient-to-r from-transparent via-green-500 to-transparent" />
+          <div className="absolute bottom-0 left-1/4 w-1/2 h-px bg-gradient-to-r from-transparent via-red-500 to-transparent" />
+          <div className="absolute top-1/4 left-0 h-1/2 w-px bg-gradient-to-b from-transparent via-yellow-500 to-transparent" />
+          <div className="absolute top-1/4 right-0 h-1/2 w-px bg-gradient-to-b from-transparent via-green-500 to-transparent" />
 
           {/* Decorative circles */}
-          <div className="absolute top-1/4 left-1/4 w-64 h-64 rounded-full bg-blue-500/5 blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-64 h-64 rounded-full bg-blue-500/5 blur-3xl" />
+          <div className="absolute top-1/4 left-1/4 w-64 h-64 rounded-full bg-green-500/5 blur-3xl" />
+          <div className="absolute bottom-1/4 right-1/4 w-64 h-64 rounded-full bg-red-500/5 blur-3xl" />
         </div>
 
         <div className="w-full max-w-md z-10">
-          <div className="relative bg-black/40 backdrop-blur-xl border border-blue-900/50 rounded-lg p-1 overflow-hidden">
+          <div className="relative bg-black/40 backdrop-blur-xl border border-green-900/50 rounded-lg p-1 overflow-hidden">
             {/* Border glow effects */}
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
-            <div className="absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-blue-500 to-transparent" />
-            <div className="absolute right-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-blue-500 to-transparent" />
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-500 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500 to-transparent" />
+            <div className="absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-yellow-500 to-transparent" />
+            <div className="absolute right-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-green-500 to-transparent" />
 
             <div className="p-6">
               <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 via-blue-400 to-blue-600 text-transparent bg-clip-text">
-                  Login WINDICABR
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 text-transparent bg-clip-text">
+                  Login FOREXITY
                 </h1>
                 <p className="text-gray-400 mt-2">Entre na sua conta para acessar o dashboard</p>
               </div>
@@ -221,7 +221,7 @@ export default function LoginPage() {
                       value={formData.email}
                       onChange={handleChange}
                       required
-                      className="bg-black/50 border-blue-900/50 focus:border-blue-500 focus:ring-blue-500/20"
+                      className="bg-black/50 border-green-900/50 focus:border-green-500 focus:ring-green-500/20"
                     />
                   </div>
                 </div>
@@ -229,7 +229,7 @@ export default function LoginPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <Label htmlFor="senha">Senha</Label>
-                    <Link href="/recuperar-senha" className="text-xs text-blue-500 hover:underline">
+                    <Link href="/recuperar-senha" className="text-xs text-green-500 hover:underline">
                       Esqueceu a senha?
                     </Link>
                   </div>
@@ -242,7 +242,7 @@ export default function LoginPage() {
                       value={formData.senha}
                       onChange={handleChange}
                       required
-                      className="bg-black/50 border-blue-900/50 focus:border-blue-500 focus:ring-blue-500/20 pr-10"
+                      className="bg-black/50 border-green-900/50 focus:border-green-500 focus:ring-green-500/20 pr-10"
                     />
                     <button
                       type="button"
@@ -257,7 +257,7 @@ export default function LoginPage() {
                 <Button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 text-white font-bold"
+                  className="w-full bg-gradient-to-r from-green-600 to-yellow-500 hover:from-green-700 hover:to-yellow-600 text-black font-bold"
                 >
                   {loading ? (
                     <>
@@ -271,7 +271,7 @@ export default function LoginPage() {
 
               <div className="mt-6 text-center text-sm text-gray-400">
                 Não tem uma conta?{" "}
-                <Link href="/cadastro" className="text-blue-500 hover:underline">
+                <Link href="/cadastro" className="text-green-500 hover:underline">
                   Cadastre-se
                 </Link>
               </div>

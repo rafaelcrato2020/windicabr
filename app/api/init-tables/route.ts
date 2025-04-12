@@ -88,18 +88,34 @@ export async function GET() {
       `)
       console.log("Tabela profiles verificada/criada com sucesso")
 
-      // Criar tabela investments
+      // Criar tabela investments - Adicionando a coluna rate
       await executeSql(`
         CREATE TABLE IF NOT EXISTS public.investments (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           user_id UUID REFERENCES auth.users(id),
           amount DECIMAL(15, 2) NOT NULL,
+          rate DECIMAL(5, 2) DEFAULT 6.0,
           status TEXT DEFAULT 'active',
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
       `)
       console.log("Tabela investments verificada/criada com sucesso")
+
+      // Verificar se a coluna rate existe e adicioná-la se não existir
+      await executeSql(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'investments' AND column_name = 'rate'
+          ) THEN
+            ALTER TABLE public.investments ADD COLUMN rate DECIMAL(5, 2) DEFAULT 6.0;
+          END IF;
+        END
+        $$;
+      `)
+      console.log("Coluna rate verificada/adicionada com sucesso")
 
       // Criar tabela yields
       await executeSql(`

@@ -367,8 +367,17 @@ export default function SaquesPage() {
   }, [selectedWithdrawalType, selectedInvestment, withdrawableBalance, investments, withdrawAmount])
 
   const handleWithdraw = () => {
-    if (withdrawAmount < 2.2) {
+    if (withdrawAmount < 50) {
       setShowMinimumAlert(true)
+      return
+    }
+
+    if (withdrawAmount > 5000) {
+      toast({
+        title: "Valor máximo excedido",
+        description: "O valor máximo para saque é $5.000,00 USDT.",
+        variant: "destructive",
+      })
       return
     }
 
@@ -478,7 +487,7 @@ export default function SaquesPage() {
 
   // Função para confirmar o saque
   const confirmWithdrawal = async () => {
-    if (withdrawAmount < 2.2 || !walletAddress) {
+    if (withdrawAmount < 50 || withdrawAmount > 5000 || !walletAddress) {
       return
     }
 
@@ -774,8 +783,8 @@ export default function SaquesPage() {
                       <AlertTitle>Informação</AlertTitle>
                       <AlertDescription>
                         Você pode sacar apenas os rendimentos gerados e comissões recebidas. O valor principal investido
-                        só pode ser sacado quando o investimento render 100% do valor investido. Saque mínimo: $2,20
-                        USDT.
+                        só pode ser sacado quando o investimento render 100% do valor investido. Saque mínimo: $50 USDT.
+                        Saque máximo: $5.000,00 USDT.
                       </AlertDescription>
                     </Alert>
 
@@ -927,7 +936,7 @@ export default function SaquesPage() {
                         <Alert className="bg-red-500/10 border-red-900/50 text-red-500">
                           <AlertCircle className="h-4 w-4" />
                           <AlertTitle>Valor mínimo</AlertTitle>
-                          <AlertDescription>O valor mínimo para saque é $2,20 USDT.</AlertDescription>
+                          <AlertDescription>O valor mínimo para saque é $50 USDT.</AlertDescription>
                         </Alert>
                       )}
 
@@ -1070,7 +1079,8 @@ export default function SaquesPage() {
                   <div className="border-t border-green-900/30 pt-4 mt-4">
                     <p className="text-sm font-medium mb-2">Informações de Saque</p>
                     <div className="space-y-2 text-sm text-gray-400">
-                      <p>• Saque mínimo: $2,20 USDT</p>
+                      <p>• Saque mínimo: $50 USDT</p>
+                      <p>• Saque máximo: $5.000,00 USDT</p>
                       <p>• Rede suportada: TRC20</p>
                       <p>• Tempo de processamento: até 24h</p>
                       <p>• Taxa de saque: 0%</p>

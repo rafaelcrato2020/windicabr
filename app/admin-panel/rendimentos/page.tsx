@@ -58,7 +58,7 @@ export default function YieldsPage() {
           .from("investments")
           .select("user_id")
           .eq("status", "active")
-          .is("amount", "not.null")
+          .not("amount", "is", null) // Sintaxe correta para verificar se não é nulo
 
         if (error) throw error
 
@@ -250,7 +250,7 @@ export default function YieldsPage() {
         .from("investments")
         .select("user_id, amount")
         .eq("status", "active")
-        .is("amount", "not.null")
+        .not("amount", "is", null)
 
       if (investmentsError) {
         console.error("Erro ao buscar investimentos:", investmentsError)

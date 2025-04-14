@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -17,34 +18,25 @@ import {
   TrendingUp,
   Clock,
 } from "lucide-react"
-import LoginModal from "@/components/login-modal"
-import RegisterModal from "@/components/register-modal"
 
 export default function Home() {
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
-  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
-  const openLoginModal = () => {
-    setIsLoginModalOpen(true)
-    setIsRegisterModalOpen(false)
-  }
+  useEffect(() => {
+    // Capturar o código de referência da URL se existir
+    const ref = searchParams.get("ref")
+    if (ref) {
+      // Armazenar o código de referência no localStorage
+      localStorage.setItem("referralCode", ref)
 
-  const openRegisterModal = () => {
-    setIsRegisterModalOpen(true)
-    setIsLoginModalOpen(false)
-  }
-
-  const closeModals = () => {
-    setIsLoginModalOpen(false)
-    setIsRegisterModalOpen(false)
-  }
+      // Redirecionar para a página de cadastro
+      router.push("/cadastro")
+    }
+  }, [searchParams, router])
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* Modals */}
-      <LoginModal isOpen={isLoginModalOpen} onClose={closeModals} onOpenRegister={openRegisterModal} />
-      <RegisterModal isOpen={isRegisterModalOpen} onClose={closeModals} onOpenLogin={openLoginModal} />
-
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-black/50 backdrop-blur-xl">
         <div className="container flex h-16 items-center justify-between">
@@ -66,18 +58,14 @@ export default function Home() {
             </Link>
           </nav>
           <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              className="border-green-500 text-green-500 hover:bg-green-500/10"
-              onClick={openLoginModal}
-            >
-              Login
+            <Button variant="outline" className="border-green-500 text-green-500 hover:bg-green-500/10" asChild>
+              <Link href="/login">Login</Link>
             </Button>
             <Button
               className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-bold"
-              onClick={openRegisterModal}
+              asChild
             >
-              Cadastre-se
+              <Link href="/cadastro">Cadastre-se</Link>
             </Button>
           </div>
         </div>
@@ -107,10 +95,12 @@ export default function Home() {
                 <Button
                   size="lg"
                   className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-bold"
-                  onClick={openRegisterModal}
+                  asChild
                 >
-                  Comece a investir agora
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  <Link href="/cadastro">
+                    Comece a investir agora
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
                 </Button>
                 <Button size="lg" variant="outline" className="border-green-500 text-green-500 hover:bg-green-500/10">
                   Saiba mais
@@ -185,10 +175,12 @@ export default function Home() {
               <Button
                 size="lg"
                 className="mt-6 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-bold px-8"
-                onClick={openRegisterModal}
+                asChild
               >
-                Comece a investir agora
-                <ArrowRight className="ml-2 h-5 w-5" />
+                <Link href="/cadastro">
+                  Comece a investir agora
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
               </Button>
             </div>
           </div>
@@ -719,10 +711,12 @@ export default function Home() {
                 <Button
                   size="lg"
                   className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-bold px-8"
-                  onClick={openRegisterModal}
+                  asChild
                 >
-                  Comece a investir agora
-                  <ArrowRight className="ml-2 h-5 w-5" />
+                  <Link href="/cadastro">
+                    Comece a investir agora
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Link>
                 </Button>
               </div>
             </div>
@@ -744,10 +738,12 @@ export default function Home() {
             <Button
               size="lg"
               className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-bold px-8 animate-pulse"
-              onClick={openRegisterModal}
+              asChild
             >
-              Comece a investir agora
-              <ArrowRight className="ml-2 h-5 w-5" />
+              <Link href="/cadastro">
+                Comece a investir agora
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
             </Button>
           </div>
         </div>

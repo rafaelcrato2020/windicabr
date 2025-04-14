@@ -3,426 +3,209 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
-import { ArrowLeft, Zap, Loader2, Eye, EyeOff } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import { createBrowserClient } from "@/utils/supabase/client"
+import { AlertCircle, ArrowLeft, CheckCircle2 } from "lucide-react"
+import Link from "next/link"
+import { generateReferralCode } from "@/utils/referral-utils"
 
-export default function CadastroPage() {
+export default function Cadastro() {
   const router = useRouter()
-  const { toast } = useToast()
-  const searchParams = useSearchParams()
-  const refCode = searchParams.get("ref")
+  const supabase = createClientComponentClient()
 
-  const [supabase, setSupabase] = useState<any>(null)
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [name, setName] = useState("")
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
-
-  // Estado do formulário
-  const [formData, setFormData] = useState({
-    nome: "",
-    email: "",
-    telefone: "",
-    senha: "",
-    confirmarSenha: "",
-    termos: false,
-    referralCode: refCode || "",
-  })
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+  const [referralCode, setReferralCode] = useState<string | null>(null)
 
   useEffect(() => {
-    // Inicializar o cliente Supabase após a montagem do componente
-    const client = createBrowserClient()
-    setSupabase(client)
-
-    // Atualizar o código de referência se mudar na URL
-    if (refCode) {
-      setFormData((prev) => ({ ...prev, referralCode: refCode }))
+    // Recuperar o código de referência do localStorage
+    const storedReferralCode = localStorage.getItem("referralCode")
+    if (storedReferralCode) {
+      setReferralCode(storedReferralCode)
+      console.log("Código de referência encontrado:", storedReferralCode)
     }
-  }, [refCode])
+  }, [])
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const handleCheckboxChange = (checked: boolean) => {
-    setFormData((prev) => ({ ...prev, termos: checked }))
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setError("")
-
-    // Validar formulário
-    if (formData.senha !== formData.confirmarSenha) {
-      setError("As senhas não coincidem")
-      setLoading(false)
-      toast({
-        title: "Erro no cadastro",
-        description: "As senhas não coincidem",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!supabase) {
-      setError("Erro de conexão com o servidor")
-      setLoading(false)
-      toast({
-        title: "Erro no cadastro",
-        description: "Não foi possível conectar ao servidor. Tente novamente.",
-        variant: "destructive",
-      })
-      return
-    }
+    setError(null)
 
     try {
-      console.log("Iniciando cadastro...")
-
-      // Registrar o usuário no Supabase Auth
+      // Cadastrar o usuário no Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.senha,
+        email,
+        password,
         options: {
-          data: {
-            name: formData.nome,
-            phone: formData.telefone,
-            email_confirmed: true, // Usuário não precisa confirmar email
-          },
-          // Adicionar esta opção para desativar emails de confirmação
-          emailRedirectTo: undefined,
+          emailRedirectTo: `${window.location.origin}/login`,
         },
       })
 
-      if (authError) {
-        console.error("Erro ao criar conta:", authError)
-        setError(authError.message)
-        toast({
-          title: "Erro no cadastro",
-          description: authError.message,
-          variant: "destructive",
-        })
-        setLoading(false)
-        return
-      }
-
-      console.log("Usuário criado:", authData)
+      if (authError) throw authError
 
       if (authData.user) {
-        // Gerar código de referência único baseado no ID do usuário
-        const referralCode = generateReferralCode(authData.user.id)
+        const userId = authData.user.id
+        const newReferralCode = generateReferralCode()
 
-        // Criar o perfil do usuário
+        // Criar perfil do usuário
         const { error: profileError } = await supabase.from("profiles").insert({
-          id: authData.user.id,
-          name: formData.nome,
-          email: formData.email,
-          referral_code: referralCode,
+          id: userId,
+          name,
+          email,
+          referral_code: newReferralCode,
         })
 
-        if (profileError) {
-          console.error("Erro ao criar perfil:", profileError)
-          toast({
-            title: "Aviso",
-            description: "Conta criada, mas houve um problema ao configurar seu perfil.",
-            variant: "default",
+        if (profileError) throw profileError
+
+        // Se tiver um código de referência, processar a indicação
+        if (referralCode) {
+          const response = await fetch("/api/process-referral", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId,
+              referralCode,
+            }),
           })
-        }
 
-        // Processar código de referência se existir
-        if (formData.referralCode) {
-          try {
-            console.log("Processando referência:", formData.referralCode)
-            const response = await fetch("/api/process-referral", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                userId: authData.user.id,
-                referralCode: formData.referralCode,
-              }),
-            })
-
-            const referralResult = await response.json()
-
-            if (!response.ok) {
-              console.error("Erro ao processar referência:", referralResult)
-              toast({
-                title: "Aviso",
-                description: "Conta criada, mas houve um problema ao processar a referência.",
-                variant: "default",
-              })
-            } else {
-              console.log("Referência processada com sucesso:", referralResult)
-            }
-          } catch (refError) {
-            console.error("Erro ao processar referência:", refError)
+          const result = await response.json()
+          if (!result.success) {
+            console.warn("Erro ao processar referência:", result.error)
+          } else {
+            console.log("Referência processada com sucesso:", result)
           }
         }
 
-        // Fazer login automaticamente após o cadastro
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: formData.email,
-          password: formData.senha,
-        })
+        setSuccess(true)
 
-        if (signInError) {
-          console.error("Erro ao fazer login automático:", signInError)
-          toast({
-            title: "Cadastro realizado com sucesso!",
-            description: "Sua conta foi criada. Redirecionando para o login...",
-            variant: "default",
-          })
+        // Limpar o código de referência do localStorage após o uso
+        localStorage.removeItem("referralCode")
 
-          // Redirecionar para a página de login se o login automático falhar
-          setTimeout(() => {
-            router.push("/login")
-          }, 2000)
-          return
-        }
-
-        toast({
-          title: "Cadastro realizado com sucesso!",
-          description: "Sua conta foi criada. Redirecionando para o dashboard...",
-          variant: "default",
-        })
-
-        // Redirecionar para o dashboard após o login bem-sucedido
+        // Redirecionar após 3 segundos
         setTimeout(() => {
-          router.push("/dashboard")
-        }, 2000)
+          router.push("/login")
+        }, 3000)
       }
     } catch (error: any) {
       console.error("Erro no cadastro:", error)
-      setError(error.message || "Erro ao criar conta")
-      toast({
-        title: "Erro no cadastro",
-        description: error.message || "Ocorreu um erro ao criar sua conta. Tente novamente.",
-        variant: "destructive",
-      })
+      setError(error.message || "Erro ao criar conta. Tente novamente.")
     } finally {
       setLoading(false)
     }
   }
 
-  // Função para gerar código de referência único
-  const generateReferralCode = (userId: string): string => {
-    const timestamp = new Date().getTime().toString(36).slice(-4)
-    const userIdPart = userId.replace(/-/g, "").slice(0, 6)
-    return `${userIdPart}${timestamp}`.toUpperCase()
-  }
-
   return (
-    <div className="min-h-screen flex flex-col bg-black">
-      {/* Header */}
-      <header className="w-full border-b bg-black/50 backdrop-blur-xl">
-        <div className="container flex h-16 items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <Zap className="h-6 w-6 text-yellow-500" />
-            <span className="text-xl font-bold bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 text-transparent bg-clip-text">
-              FOREXITY
-            </span>
-          </Link>
-          <Link href="/" className="text-sm font-medium text-white hover:text-yellow-500 flex items-center gap-1">
-            <ArrowLeft className="h-4 w-4" />
-            Voltar
-          </Link>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-4 md:p-8 relative">
-        {/* Background Elements */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-0 left-1/4 w-1/2 h-px bg-gradient-to-r from-transparent via-green-500 to-transparent" />
-          <div className="absolute bottom-0 left-1/4 w-1/2 h-px bg-gradient-to-r from-transparent via-red-500 to-transparent" />
-          <div className="absolute top-1/4 left-0 h-1/2 w-px bg-gradient-to-b from-transparent via-yellow-500 to-transparent" />
-          <div className="absolute top-1/4 right-0 h-1/2 w-px bg-gradient-to-b from-transparent via-green-500 to-transparent" />
-
-          {/* Decorative circles */}
-          <div className="absolute top-1/4 left-1/4 w-64 h-64 rounded-full bg-green-500/5 blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-64 h-64 rounded-full bg-red-500/5 blur-3xl" />
-        </div>
-
-        <div className="w-full max-w-md z-10">
-          <div className="relative bg-black/40 backdrop-blur-xl border border-green-900/50 rounded-lg p-1 overflow-hidden">
-            {/* Border glow effects */}
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-500 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500 to-transparent" />
-            <div className="absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-yellow-500 to-transparent" />
-            <div className="absolute right-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-green-500 to-transparent" />
-
-            <div className="p-6">
-              <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 text-transparent bg-clip-text">
-                  Cadastre-se na FOREXITY
-                </h1>
-                <p className="text-gray-400 mt-2">Crie sua conta e comece a investir nos maiores mercados do mundo</p>
-
-                {formData.referralCode && (
-                  <div className="mt-2 p-2 bg-green-500/10 border border-green-500/20 rounded-md">
-                    <p className="text-green-500 text-sm">
-                      Você foi convidado por um afiliado! Código: {formData.referralCode}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {error && (
-                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-md text-red-500 text-sm">
-                  {error}
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="nome">Nome completo</Label>
-                  <div className="relative">
-                    <Input
-                      id="nome"
-                      name="nome"
-                      placeholder="Digite seu nome completo"
-                      value={formData.nome}
-                      onChange={handleChange}
-                      required
-                      className="bg-black/50 border-green-900/50 focus:border-green-500 focus:ring-green-500/20"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">E-mail</Label>
-                  <div className="relative">
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      placeholder="Digite seu e-mail"
-                      value={formData.email}
-                      onChange={handleChange}
-                      required
-                      className="bg-black/50 border-green-900/50 focus:border-green-500 focus:ring-green-500/20"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="telefone">Telefone</Label>
-                  <div className="relative">
-                    <Input
-                      id="telefone"
-                      name="telefone"
-                      placeholder="Digite seu telefone"
-                      value={formData.telefone}
-                      onChange={handleChange}
-                      required
-                      className="bg-black/50 border-green-900/50 focus:border-green-500 focus:ring-green-500/20"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="senha">Senha</Label>
-                  <div className="relative">
-                    <Input
-                      id="senha"
-                      name="senha"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Crie uma senha forte"
-                      value={formData.senha}
-                      onChange={handleChange}
-                      required
-                      className="bg-black/50 border-green-900/50 focus:border-green-500 focus:ring-green-500/20 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                    >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="confirmarSenha">Confirmar senha</Label>
-                  <div className="relative">
-                    <Input
-                      id="confirmarSenha"
-                      name="confirmarSenha"
-                      type={showConfirmPassword ? "text" : "password"}
-                      placeholder="Confirme sua senha"
-                      value={formData.confirmarSenha}
-                      onChange={handleChange}
-                      required
-                      className="bg-black/50 border-green-900/50 focus:border-green-500 focus:ring-green-500/20 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                    >
-                      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="termos"
-                    checked={formData.termos}
-                    onCheckedChange={handleCheckboxChange}
-                    className="border-green-900 data-[state=checked]:bg-green-500 data-[state=checked]:text-black"
-                  />
-                  <label
-                    htmlFor="termos"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-gray-300"
-                  >
-                    Concordo com os{" "}
-                    <Link href="#" className="text-green-500 hover:underline">
-                      termos de uso
-                    </Link>{" "}
-                    e{" "}
-                    <Link href="#" className="text-green-500 hover:underline">
-                      política de privacidade
-                    </Link>
-                  </label>
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={loading || !formData.termos}
-                  className="w-full bg-gradient-to-r from-green-600 to-yellow-500 hover:from-green-700 hover:to-yellow-600 text-black font-bold"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando...
-                    </>
-                  ) : (
-                    "Criar minha conta"
-                  )}
-                </Button>
-              </form>
-
-              <div className="mt-6 text-center text-sm text-gray-400">
-                Já tem uma conta?{" "}
-                <Link href="/login" className="text-green-500 hover:underline">
-                  Faça login
-                </Link>
-              </div>
-            </div>
+    <div className="min-h-screen flex items-center justify-center bg-black p-4">
+      <Card className="w-full max-w-md bg-black border-green-900">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <Link href="/" className="text-green-500 hover:text-green-400 flex items-center">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Voltar
+            </Link>
           </div>
-        </div>
-      </main>
+          <CardTitle className="text-2xl text-white mt-4">Criar conta</CardTitle>
+          <CardDescription className="text-gray-400">Preencha os dados abaixo para criar sua conta</CardDescription>
+          {referralCode && (
+            <div className="mt-2 p-2 bg-green-900/20 border border-green-500/30 rounded-md">
+              <p className="text-sm text-green-400 flex items-center">
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                Você foi indicado por um usuário. Código: {referralCode}
+              </p>
+            </div>
+          )}
+        </CardHeader>
+        <CardContent>
+          {error && (
+            <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-md">
+              <p className="text-sm text-red-400 flex items-center">
+                <AlertCircle className="mr-2 h-4 w-4" />
+                {error}
+              </p>
+            </div>
+          )}
+
+          {success ? (
+            <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-md text-center">
+              <CheckCircle2 className="mx-auto h-12 w-12 text-green-500 mb-2" />
+              <h3 className="text-xl font-bold text-white mb-2">Cadastro realizado com sucesso!</h3>
+              <p className="text-gray-300 mb-4">
+                Verifique seu e-mail para confirmar sua conta. Você será redirecionado para a página de login em
+                instantes.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleSignUp} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-white">
+                  Nome completo
+                </Label>
+                <Input
+                  id="name"
+                  placeholder="Digite seu nome completo"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="bg-black border-green-900 text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-white">
+                  E-mail
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="Digite seu e-mail"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="bg-black border-green-900 text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-white">
+                  Senha
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Digite sua senha"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="bg-black border-green-900 text-white"
+                />
+              </div>
+              <Button
+                type="submit"
+                className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-bold"
+                disabled={loading}
+              >
+                {loading ? "Processando..." : "Criar conta"}
+              </Button>
+            </form>
+          )}
+        </CardContent>
+        <CardFooter className="flex flex-col space-y-2">
+          <div className="text-sm text-gray-400 text-center">
+            Já tem uma conta?{" "}
+            <Link href="/login" className="text-green-500 hover:text-green-400">
+              Faça login
+            </Link>
+          </div>
+        </CardFooter>
+      </Card>
     </div>
   )
 }

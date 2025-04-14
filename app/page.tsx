@@ -1,9 +1,5 @@
-import dynamic from "next/dynamic"
-
-const HomePageClient = dynamic(() => import("./home-page-client"), {
-  ssr: false,
-})
+import { ClientWrapper } from "./client-wrapper"
 
 export default function Home() {
-  return <HomePageClient />
+  return <ClientWrapper />
 }

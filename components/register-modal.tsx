@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,6 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Loader2, Eye, EyeOff, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { createBrowserClient } from "@/utils/supabase/client"
+import { useSearchParams } from "next/navigation"
+import { generateReferralCode } from "@/utils/referral"
 
 interface RegisterModalProps {
   isOpen: boolean
@@ -20,7 +22,6 @@ interface RegisterModalProps {
 
 export default function RegisterModal({ isOpen, onClose, onOpenLogin }: RegisterModalProps) {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [supabase, setSupabase] = useState<any>(null)
   const [showPassword, setShowPassword] = useState(false)
@@ -36,6 +37,7 @@ export default function RegisterModal({ isOpen, onClose, onOpenLogin }: Register
   })
 
   // Obter código de referência da URL, se existir
+  const searchParams = useSearchParams()
   const referralCode = searchParams.get("ref") || ""
 
   useEffect(() => {
@@ -50,6 +52,29 @@ export default function RegisterModal({ isOpen, onClose, onOpenLogin }: Register
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }))
+  }
+
+  // Function to get the referrer's ID from their referral code
+  const getReferrerId = async (referralCode: string, supabase: any) => {
+    if (!referralCode) return null
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("unique_referral_code", referralCode)
+        .single()
+
+      if (error || !data) {
+        console.error("Error finding referrer:", error)
+        return null
+      }
+
+      return data.id
+    } catch (err) {
+      console.error("Error in getReferrerId:", err)
+      return null
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -119,7 +144,7 @@ export default function RegisterModal({ isOpen, onClose, onOpenLogin }: Register
         return
       }
 
-      // Processar código de referência, se existir
+      // Process referral code, if it exists
       if (referralCode) {
         try {
           await fetch("/api/process-referral", {
@@ -137,6 +162,35 @@ export default function RegisterModal({ isOpen, onClose, onOpenLogin }: Register
           console.error("Erro ao processar referência:", refError)
           // Não interromper o fluxo se houver erro no processamento da referência
         }
+      }
+
+      // Generate a unique referral code for the user
+      const uniqueReferralCode = generateReferralCode(data.user.id)
+
+      // Create user profile in 'profiles' table
+      try {
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .insert({
+            id: data.user.id,
+            email: formData.email,
+            name: formData.nome,
+            referral_code: referralCode, // Store the referral code used during registration
+            unique_referral_code: uniqueReferralCode, // Store the user's unique referral code
+            referred_by: referralCode ? await getReferrerId(referralCode, supabase) : null,
+          })
+          .single()
+
+        if (profileError) {
+          console.error("Error creating profile:", profileError)
+          throw profileError // Re-throw to be caught in the main catch block
+        }
+      } catch (profileCreationError: any) {
+        console.error("Error creating profile:", profileCreationError)
+        setError("Erro ao criar perfil de usuário. Entre em contato com o suporte.")
+        toast({ title: "Erro no cadastro", description: "Erro ao criar perfil de usuário.", variant: "destructive" })
+        setLoading(false)
+        return
       }
 
       // Cadastro bem-sucedido

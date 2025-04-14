@@ -34,17 +34,17 @@ export async function GET() {
         message:
           "A função SQL não pôde ser criada automaticamente. Por favor, execute o SQL manualmente no console do Supabase.",
         sqlToExecute: `
-          -- Execute este SQL no console do Supabase:
-          CREATE OR REPLACE FUNCTION exec_sql(sql_query TEXT)
-          RETURNS VOID
-          LANGUAGE plpgsql
-          SECURITY DEFINER
-          AS $$
-          BEGIN
-            EXECUTE sql_query;
-          END;
-          $$;
-        `,
+        -- Execute este SQL no console do Supabase:
+        CREATE OR REPLACE FUNCTION exec_sql(sql_query TEXT)
+        RETURNS VOID
+        LANGUAGE plpgsql
+        SECURITY DEFINER
+        AS $$
+        BEGIN
+          EXECUTE sql_query;
+        END;
+        $$;
+      `,
       })
     }
 

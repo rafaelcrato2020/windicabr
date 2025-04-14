@@ -19,15 +19,15 @@ export async function GET() {
     const { error: depositsError } = await supabase.rpc("create_table_if_not_exists", {
       table_name: "deposits",
       table_definition: `
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-        user_id uuid REFERENCES auth.users(id) NOT NULL,
-        amount decimal NOT NULL,
-        payment_method text,
-        status text DEFAULT 'pending',
-        notes text,
-        created_at timestamp with time zone DEFAULT now(),
-        updated_at timestamp with time zone DEFAULT now()
-      `,
+      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id uuid REFERENCES auth.users(id) NOT NULL,
+      amount decimal NOT NULL,
+      payment_method text,
+      status text DEFAULT 'pending',
+      notes text,
+      created_at timestamp with time zone DEFAULT now(),
+      updated_at timestamp with time zone DEFAULT now()
+    `,
     })
 
     if (depositsError) {
@@ -38,16 +38,16 @@ export async function GET() {
     const { error: withdrawalsError } = await supabase.rpc("create_table_if_not_exists", {
       table_name: "withdrawals",
       table_definition: `
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-        user_id uuid REFERENCES auth.users(id) NOT NULL,
-        amount decimal NOT NULL,
-        payment_method text,
-        pix_key text,
-        status text DEFAULT 'pending',
-        notes text,
-        created_at timestamp with time zone DEFAULT now(),
-        updated_at timestamp with time zone DEFAULT now()
-      `,
+      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id uuid REFERENCES auth.users(id) NOT NULL,
+      amount decimal NOT NULL,
+      payment_method text,
+      pix_key text,
+      status text DEFAULT 'pending',
+      notes text,
+      created_at timestamp with time zone DEFAULT now(),
+      updated_at timestamp with time zone DEFAULT now()
+    `,
     })
 
     if (withdrawalsError) {
@@ -58,14 +58,14 @@ export async function GET() {
     const { error: transactionsError } = await supabase.rpc("create_table_if_not_exists", {
       table_name: "transactions",
       table_definition: `
-        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-        user_id uuid REFERENCES auth.users(id) NOT NULL,
-        amount decimal NOT NULL,
-        type text NOT NULL,
-        description text,
-        status text DEFAULT 'pending',
-        created_at timestamp with time zone DEFAULT now()
-      `,
+      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id uuid REFERENCES auth.users(id) NOT NULL,
+      amount decimal NOT NULL,
+      type text NOT NULL,
+      description text,
+      status text DEFAULT 'pending',
+      created_at timestamp with time zone DEFAULT now()
+    `,
     })
 
     if (transactionsError) {
@@ -76,20 +76,20 @@ export async function GET() {
     const { error: settingsError } = await supabase.rpc("create_table_if_not_exists", {
       table_name: "settings",
       table_definition: `
-        id integer PRIMARY KEY DEFAULT 1,
-        min_deposit decimal DEFAULT 100,
-        min_withdrawal decimal DEFAULT 50,
-        withdrawal_fee decimal DEFAULT 2.5,
-        min_investment decimal DEFAULT 100,
-        max_daily_yield decimal DEFAULT 10,
-        affiliate_level1 decimal DEFAULT 10,
-        affiliate_level2 decimal DEFAULT 5,
-        affiliate_level3 decimal DEFAULT 3,
-        affiliate_level4 decimal DEFAULT 2,
-        maintenance_mode boolean DEFAULT false,
-        created_at timestamp with time zone DEFAULT now(),
-        updated_at timestamp with time zone DEFAULT now()
-      `,
+      id integer PRIMARY KEY DEFAULT 1,
+      min_deposit decimal DEFAULT 100,
+      min_withdrawal decimal DEFAULT 50,
+      withdrawal_fee decimal DEFAULT 2.5,
+      min_investment decimal DEFAULT 100,
+      max_daily_yield decimal DEFAULT 10,
+      affiliate_level1 decimal DEFAULT 10,
+      affiliate_level2 decimal DEFAULT 5,
+      affiliate_level3 decimal DEFAULT 3,
+      affiliate_level4 decimal DEFAULT 2,
+      maintenance_mode boolean DEFAULT false,
+      created_at timestamp with time zone DEFAULT now(),
+      updated_at timestamp with time zone DEFAULT now()
+    `,
     })
 
     if (settingsError) {
@@ -100,11 +100,11 @@ export async function GET() {
     const { error: affiliateStatsError } = await supabase.rpc("create_table_if_not_exists", {
       table_name: "affiliate_stats",
       table_definition: `
-        id integer PRIMARY KEY DEFAULT 1,
-        total_commissions decimal DEFAULT 0,
-        total_referrals integer DEFAULT 0,
-        updated_at timestamp with time zone DEFAULT now()
-      `,
+      id integer PRIMARY KEY DEFAULT 1,
+      total_commissions decimal DEFAULT 0,
+      total_referrals integer DEFAULT 0,
+      updated_at timestamp with time zone DEFAULT now()
+    `,
     })
 
     if (affiliateStatsError) {
@@ -114,17 +114,17 @@ export async function GET() {
     // 6. Adicionar colunas necessárias à tabela de perfis se não existirem
     const { error: alterProfilesError } = await supabase.rpc("execute_sql", {
       sql: `
-        ALTER TABLE IF EXISTS profiles 
-        ADD COLUMN IF NOT EXISTS balance decimal DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS investments decimal DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS affiliate_code text,
-        ADD COLUMN IF NOT EXISTS affiliate_earnings decimal DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS referred_by uuid,
-        ADD COLUMN IF NOT EXISTS last_yield_date timestamp with time zone,
-        ADD COLUMN IF NOT EXISTS last_yield_rate decimal,
-        ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true,
-        ADD COLUMN IF NOT EXISTS role text DEFAULT 'user';
-      `,
+      ALTER TABLE IF EXISTS profiles 
+      ADD COLUMN IF NOT EXISTS balance decimal DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS investments decimal DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS affiliate_code text,
+      ADD COLUMN IF NOT EXISTS affiliate_earnings decimal DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS referred_by uuid,
+      ADD COLUMN IF NOT EXISTS last_yield_date timestamp with time zone,
+      ADD COLUMN IF NOT EXISTS last_yield_rate decimal,
+      ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true,
+      ADD COLUMN IF NOT EXISTS role text DEFAULT 'user';
+    `,
     })
 
     if (alterProfilesError) {

@@ -88,6 +88,8 @@ export default function Home() {
           <div className="absolute inset-0 bg-gradient-to-br from-green-900/40 via-black to-green-900/40" />
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-500 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-500 to-transparent" />
+          <div className="absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-yellow-500 to-transparent" />
+          <div className="absolute right-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-green-500 to-transparent" />
         </div>
         <div className="container relative z-10">
           <div className="grid gap-6 lg:grid-cols-2 lg:gap-12 items-center">
@@ -229,7 +231,7 @@ export default function Home() {
                 fill
                 className="object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
             </div>
             <div className="absolute bottom-0 left-0 right-0 p-8 md:p-12">
               <div className="max-w-3xl mx-auto">
@@ -335,7 +337,7 @@ export default function Home() {
       </section>
 
       {/* Forex Trading Section */}
-      <section id="forex" className="py-20 bg-gradient-to-b from-green-950/50 to-green-950">
+      <section id="forex" className="py-20 bg-gradient-to-b from-green-950 to-green-950">
         <div className="container">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-4 bg-gradient-to-r from-green-500 to-green-600 text-transparent bg-clip-text">
@@ -528,47 +530,6 @@ export default function Home() {
                     </div>
                     <p className="text-gray-300">
                       <span className="text-green-500 font-medium">Taxa:</span> 0% (sem taxas de saque)
-                    </p>
-                  </li>
-                </ul>
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-white mb-4">Vantagens Exclusivas</h3>
-                <ul className="space-y-3">
-                  <li className="flex items-start">
-                    <div className="flex-shrink-0 w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center mt-0.5 mr-3">
-                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    </div>
-                    <p className="text-gray-300">
-                      <span className="text-green-500 font-medium">Operações 24/5:</span> Mercado Forex ativo durante
-                      toda a semana
-                    </p>
-                  </li>
-                  <li className="flex items-start">
-                    <div className="flex-shrink-0 w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center mt-0.5 mr-3">
-                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    </div>
-                    <p className="text-gray-300">
-                      <span className="text-green-500 font-medium">Suporte especializado:</span> Equipe de traders
-                      profissionais
-                    </p>
-                  </li>
-                  <li className="flex items-start">
-                    <div className="flex-shrink-0 w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center mt-0.5 mr-3">
-                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    </div>
-                    <p className="text-gray-300">
-                      <span className="text-green-500 font-medium">Transparência:</span> Acompanhe suas operações em
-                      tempo real
-                    </p>
-                  </li>
-                  <li className="flex items-start">
-                    <div className="flex-shrink-0 w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center mt-0.5 mr-3">
-                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    </div>
-                    <p className="text-gray-300">
-                      <span className="text-green-500 font-medium">Segurança:</span> Proteção avançada para seus
-                      investimentos
                     </p>
                   </li>
                 </ul>

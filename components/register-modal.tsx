@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,7 +11,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Loader2, Eye, EyeOff, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { createBrowserClient } from "@/utils/supabase/client"
-import { useSearchParams } from "next/navigation"
 
 interface RegisterModalProps {
   isOpen: boolean
@@ -21,6 +20,7 @@ interface RegisterModalProps {
 
 export default function RegisterModal({ isOpen, onClose, onOpenLogin }: RegisterModalProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [supabase, setSupabase] = useState<any>(null)
   const [showPassword, setShowPassword] = useState(false)
@@ -36,7 +36,6 @@ export default function RegisterModal({ isOpen, onClose, onOpenLogin }: Register
   })
 
   // Obter código de referência da URL, se existir
-  const searchParams = useSearchParams()
   const referralCode = searchParams.get("ref") || ""
 
   useEffect(() => {

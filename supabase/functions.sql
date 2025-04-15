@@ -5,6 +5,6 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
-EXECUTE sql_query;
+  EXECUTE sql_query;
 END;
 $$;

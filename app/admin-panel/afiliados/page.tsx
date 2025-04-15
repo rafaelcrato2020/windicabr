@@ -13,21 +13,6 @@ export default async function AffiliatesPage() {
   // Buscar estatísticas de afiliados
   const { data: affiliateStats } = await supabase.from("affiliate_stats").select("*").single()
 
-  // Function to fetch team count
-  async function getTeamCount(userId: string) {
-    const res = await fetch(`/api/team-count?userId=${userId}`)
-    const data = await res.json()
-    return data.success ? data.count : 0
-  }
-
-  // Fetch team counts for each user
-  const usersWithTeamCount = await Promise.all(
-    users.map(async (user) => {
-      const teamCount = await getTeamCount(user.id)
-      return { ...user, teamCount }
-    }),
-  )
-
   const stats = [
     {
       title: "Total de Afiliados",
@@ -129,12 +114,11 @@ export default async function AffiliatesPage() {
                 <th className="px-6 py-3 text-gray-300">Código</th>
                 <th className="px-6 py-3 text-gray-300">Ganhos</th>
                 <th className="px-6 py-3 text-gray-300">Indicados</th>
-                <th className="px-6 py-3 text-gray-300">Equipe</th>
                 <th className="px-6 py-3 text-gray-300">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700">
-              {usersWithTeamCount?.map((user: any) => (
+              {users?.map((user: any) => (
                 <tr key={user.id} className="hover:bg-gray-700">
                   <td className="px-6 py-4">{user.name || "Usuário"}</td>
                   <td className="px-6 py-4">{user.email}</td>
@@ -143,7 +127,6 @@ export default async function AffiliatesPage() {
                     R$ {(user.affiliate_earnings || 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4">0</td>
-                  <td className="px-6 py-4">{user.teamCount}</td>
                   <td className="px-6 py-4">
                     <Link
                       href={`/admin-panel/afiliados/${user.id}`}
@@ -156,7 +139,7 @@ export default async function AffiliatesPage() {
               ))}
               {(!users || users.length === 0) && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-4 text-center text-gray-400">
+                  <td colSpan={6} className="px-6 py-4 text-center text-gray-400">
                     Nenhum afiliado encontrado
                   </td>
                 </tr>

@@ -36,20 +36,20 @@ export default function SyncUsersPage() {
         try {
           const { error: createError } = await supabase.rpc("exec_sql", {
             sql_query: `
-            CREATE TABLE IF NOT EXISTS public.profiles (
-              id UUID PRIMARY KEY REFERENCES auth.users(id),
-              name TEXT,
-              email TEXT,
-              avatar_url TEXT,
-              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-              updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-              balance DECIMAL(15, 2) DEFAULT 0,
-              investments DECIMAL(15, 2) DEFAULT 0,
-              referral_code TEXT,
-              referred_by TEXT,
-              is_active BOOLEAN DEFAULT true
-            )
-          `,
+             CREATE TABLE IF NOT EXISTS public.profiles (
+               id UUID PRIMARY KEY REFERENCES auth.users(id),
+               name TEXT,
+               email TEXT,
+               avatar_url TEXT,
+               created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+               updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+               balance DECIMAL(15, 2) DEFAULT 0,
+               investments DECIMAL(15, 2) DEFAULT 0,
+               referral_code TEXT,
+               referred_by TEXT,
+               is_active BOOLEAN DEFAULT true
+             )
+           `,
           })
 
           if (createError) {
@@ -165,30 +165,30 @@ export default function SyncUsersPage() {
       try {
         const { error: triggerError } = await supabase.rpc("exec_sql", {
           sql_query: `
-          -- Função para criar perfil automaticamente
-          CREATE OR REPLACE FUNCTION public.create_profile_for_new_user()
-          RETURNS TRIGGER AS $$
-          BEGIN
-            INSERT INTO public.profiles (id, email, name, created_at)
-            VALUES (
-              NEW.id,
-              NEW.email,
-              COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1), 'Usuário'),
-              NEW.created_at
-            );
-            RETURN NEW;
-          END;
-          $$ LANGUAGE plpgsql SECURITY DEFINER;
+           -- Função para criar perfil automaticamente
+           CREATE OR REPLACE FUNCTION public.create_profile_for_new_user()
+           RETURNS TRIGGER AS $$
+           BEGIN
+             INSERT INTO public.profiles (id, email, name, created_at)
+             VALUES (
+               NEW.id,
+               NEW.email,
+               COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1), 'Usuário'),
+               NEW.created_at
+             );
+             RETURN NEW;
+           END;
+           $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-          -- Remover o trigger se já existir
-          DROP TRIGGER IF EXISTS create_profile_trigger ON auth.users;
+           -- Remover o trigger se já existir
+           DROP TRIGGER IF EXISTS create_profile_trigger ON auth.users;
 
-          -- Criar o trigger
-          CREATE TRIGGER create_profile_trigger
-          AFTER INSERT ON auth.users
-          FOR EACH ROW
-          EXECUTE FUNCTION public.create_profile_for_new_user();
-        `,
+           -- Criar o trigger
+           CREATE TRIGGER create_profile_trigger
+           AFTER INSERT ON auth.users
+           FOR EACH ROW
+           EXECUTE FUNCTION public.create_profile_for_new_user();
+         `,
         })
 
         if (triggerError) {

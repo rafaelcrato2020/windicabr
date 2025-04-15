@@ -180,23 +180,29 @@ export default function RejectWithdrawal({ params }: { params: { id: string } })
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <p className="text-gray-400 text-sm">Usuário</p>
-            <p className="font-medium">{withdrawal.profiles?.name || "Usuário"}</p>
+            <p className="font-medium">{withdrawal.profiles?.name}</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm">Email</p>
-            <p className="font-medium">{withdrawal.profiles?.email || "Não disponível"}</p>
+            <p className="font-medium">{withdrawal.profiles?.email}</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm">Valor</p>
             <p className="font-medium text-red-400">R$ {withdrawal.amount.toFixed(2)}</p>
           </div>
           <div>
+            <p className="text-gray-400 text-sm">Método</p>
+            <p className="font-medium">{withdrawal.payment_method || "Pix"}</p>
+          </div>
+          <div>
             <p className="text-gray-400 text-sm">Data</p>
             <p className="font-medium">{new Date(withdrawal.created_at).toLocaleDateString("pt-BR")}</p>
           </div>
-          <div className="col-span-2">
-            <p className="text-gray-400 text-sm">Carteira USDT (TRC20)</p>
-            <p className="font-medium font-mono break-all">{withdrawal.pix_key || "Não informado"}</p>
+          <div>
+            <p className="text-gray-400 text-sm">Status</p>
+            <p className="font-medium">
+              <span className="px-2 py-1 rounded-full text-xs bg-yellow-500/20 text-yellow-400">Pendente</span>
+            </p>
           </div>
         </div>
 
@@ -213,7 +219,7 @@ export default function RejectWithdrawal({ params }: { params: { id: string } })
           <div className="flex space-x-4">
             <button
               onClick={handleReject}
-              disabled={processing || !reason.trim()}
+              disabled={processing}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {processing ? (

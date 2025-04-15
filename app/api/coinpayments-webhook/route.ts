@@ -139,7 +139,7 @@ export async function POST(request: Request) {
 }
 
 // Função para processar comissões de afiliados
-async function processReferralCommission(userId: string, depositAmount: number, description: string, supabase: any) {
+async function processReferralCommission(userId: string, amount: number, description: string, supabase: any) {
   try {
     // Verificar se o usuário foi indicado por alguém
     const { data: userData, error: userError } = await supabase
@@ -155,7 +155,7 @@ async function processReferralCommission(userId: string, depositAmount: number, 
 
     // Processar comissão de nível 1 (10%)
     const referrerId = userData.referred_by
-    const level1Commission = depositAmount * 0.1
+    const level1Commission = amount * 0.1
 
     // Atualizar saldo do indicador
     const { data: referrerData, error: referrerError } = await supabase
@@ -201,7 +201,7 @@ async function processReferralCommission(userId: string, depositAmount: number, 
     if (!level2Error && level2Data.referred_by) {
       // Processar comissão de nível 2 (5%)
       const level2ReferrerId = level2Data.referred_by
-      const level2Commission = depositAmount * 0.05
+      const level2Commission = amount * 0.05
 
       // Atualizar saldo do indicador nível 2
       const { data: level2ReferrerData, error: level2ReferrerError } = await supabase
@@ -237,7 +237,7 @@ async function processReferralCommission(userId: string, depositAmount: number, 
 
       if (!level3Error && level3Data.referred_by) {
         const level3ReferrerId = level3Data.referred_by
-        const level3Commission = depositAmount * 0.03
+        const level3Commission = amount * 0.03
 
         const { data: level3ReferrerData } = await supabase
           .from("profiles")
@@ -278,7 +278,7 @@ async function processReferralCommission(userId: string, depositAmount: number, 
 
         if (!level4Error && level4Data && level4Data.referred_by) {
           const level4ReferrerId = level4Data.referred_by
-          const level4Commission = depositAmount * 0.02
+          const level4Commission = amount * 0.02
 
           const { data: level4ReferrerData } = await supabase
             .from("profiles")

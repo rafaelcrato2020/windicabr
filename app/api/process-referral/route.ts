@@ -1,56 +1,78 @@
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
+import { createServerClient } from "@/utils/supabase/server"
 import { NextResponse } from "next/server"
 
 export async function POST(request: Request) {
   try {
-    const { referralCode, userId } = await request.json()
+    const supabase = createServerClient()
+    const { userId, referralCode } = await request.json()
 
-    if (!referralCode || !userId) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    if (!userId || !referralCode) {
+      return NextResponse.json(
+        { success: false, error: "ID do usuário e código de referência são obrigatórios" },
+        { status: 400 },
+      )
     }
 
-    const supabase = createRouteHandlerClient({ cookies })
+    console.log(`Processando referência: userId=${userId}, referralCode=${referralCode}`)
 
-    // Find the referrer based on their unique referral code
-    const { data: referrer, error: referrerError } = await supabase
+    // Verificar se o usuário que está sendo referido existe
+    const { data: userExists, error: userCheckError } = await supabase
       .from("profiles")
-      .select("id, referral_count")
-      .eq("unique_referral_code", referralCode)
+      .select("id")
+      .eq("id", userId)
       .single()
 
-    if (referrerError || !referrer) {
-      console.error("Error finding referrer:", referrerError)
-      return NextResponse.json({ error: "Invalid referral code" }, { status: 400 })
+    if (userCheckError) {
+      console.error("Erro ao verificar usuário:", userCheckError)
+      return NextResponse.json({ success: false, error: "Usuário não encontrado" }, { status: 404 })
     }
 
-    // Update the referrer's referral count
+    // Buscar o usuário que fez a indicação pelo código de referência
+    const { data: referrerData, error: referrerError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("referral_code", referralCode)
+      .single()
+
+    if (referrerError || !referrerData) {
+      console.error("Erro ao buscar referenciador:", referrerError)
+      return NextResponse.json({ success: false, error: "Código de referência inválido" }, { status: 400 })
+    }
+
+    console.log(`Referenciador encontrado: ${referrerData.id}`)
+
+    // Verificar se não é auto-referência
+    if (userId === referrerData.id) {
+      console.error("Tentativa de auto-referência detectada")
+      return NextResponse.json(
+        { success: false, error: "Não é possível usar seu próprio código de referência" },
+        { status: 400 },
+      )
+    }
+
+    // Atualizar o perfil do novo usuário com o ID do referenciador
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({
-        referral_count: (referrer.referral_count || 0) + 1,
-      })
-      .eq("id", referrer.id)
-
-    if (updateError) {
-      console.error("Error updating referrer count:", updateError)
-      return NextResponse.json({ error: "Failed to update referrer" }, { status: 500 })
-    }
-
-    // Update the new user's profile to link to their referrer
-    const { error: userUpdateError } = await supabase
-      .from("profiles")
-      .update({ referred_by: referrer.id })
+      .update({ referred_by: referrerData.id })
       .eq("id", userId)
 
-    if (userUpdateError) {
-      console.error("Error linking user to referrer:", userUpdateError)
-      return NextResponse.json({ error: "Failed to link user to referrer" }, { status: 500 })
+    if (updateError) {
+      console.error("Erro ao atualizar referência:", updateError)
+      return NextResponse.json({ success: false, error: "Erro ao atualizar referência" }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error("Error processing referral:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.log(`Perfil atualizado com sucesso: userId=${userId}, referred_by=${referrerData.id}`)
+
+    return NextResponse.json({
+      success: true,
+      message: "Referência processada com sucesso",
+      data: {
+        userId,
+        referrerId: referrerData.id,
+      },
+    })
+  } catch (error: any) {
+    console.error("Erro ao processar referência:", error)
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }

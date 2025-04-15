@@ -1,14 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
   ArrowRight,
   BarChart3,
   DollarSign,
+  Users,
   Zap,
   LineChart,
   CandlestickChart,
@@ -16,34 +18,25 @@ import {
   TrendingUp,
   Clock,
 } from "lucide-react"
-import LoginModal from "@/components/login-modal"
-import RegisterModal from "@/components/register-modal"
 
 export default function Home() {
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
-  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
-  const openLoginModal = () => {
-    setIsLoginModalOpen(true)
-    setIsRegisterModalOpen(false)
-  }
+  useEffect(() => {
+    // Capturar o código de referência da URL se existir
+    const ref = searchParams.get("ref")
+    if (ref) {
+      // Armazenar o código de referência no localStorage
+      localStorage.setItem("referralCode", ref)
 
-  const openRegisterModal = () => {
-    setIsRegisterModalOpen(true)
-    setIsLoginModalOpen(false)
-  }
-
-  const closeModals = () => {
-    setIsLoginModalOpen(false)
-    setIsRegisterModalOpen(false)
-  }
+      // Redirecionar para a página de cadastro
+      router.push("/cadastro")
+    }
+  }, [searchParams, router])
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* Modals */}
-      <LoginModal isOpen={isLoginModalOpen} onClose={closeModals} onOpenRegister={openRegisterModal} />
-      <RegisterModal isOpen={isRegisterModalOpen} onClose={closeModals} onOpenLogin={openLoginModal} />
-
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-black/50 backdrop-blur-xl">
         <div className="container flex h-16 items-center justify-between">
@@ -65,18 +58,14 @@ export default function Home() {
             </Link>
           </nav>
           <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              className="border-green-500 text-green-500 hover:bg-green-500/10"
-              onClick={openLoginModal}
-            >
-              Login
+            <Button variant="outline" className="border-green-500 text-green-500 hover:bg-green-500/10" asChild>
+              <Link href="/login">Login</Link>
             </Button>
             <Button
               className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-bold"
-              onClick={openRegisterModal}
+              asChild
             >
-              Cadastre-se
+              <Link href="/cadastro">Cadastre-se</Link>
             </Button>
           </div>
         </div>
@@ -106,10 +95,12 @@ export default function Home() {
                 <Button
                   size="lg"
                   className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-bold"
-                  onClick={openRegisterModal}
+                  asChild
                 >
-                  Comece a investir agora
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  <Link href="/cadastro">
+                    Comece a investir agora
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
                 </Button>
                 <Button size="lg" variant="outline" className="border-green-500 text-green-500 hover:bg-green-500/10">
                   Saiba mais
@@ -184,10 +175,12 @@ export default function Home() {
               <Button
                 size="lg"
                 className="mt-6 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-bold px-8"
-                onClick={openRegisterModal}
+                asChild
               >
-                Comece a investir agora
-                <ArrowRight className="ml-2 h-5 w-5" />
+                <Link href="/cadastro">
+                  Comece a investir agora
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
               </Button>
             </div>
           </div>
@@ -578,6 +571,159 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Affiliate Program Section */}
+      <section id="affiliate" className="py-20 bg-gradient-to-b from-black to-green-950">
+        <div className="container">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 bg-gradient-to-r from-green-500 via-green-400 to-green-600 text-transparent bg-clip-text">
+              Programa de Afiliados
+            </h2>
+            <p className="text-gray-300 max-w-2xl mx-auto">
+              Multiplique seus ganhos indicando novos investidores para nossa plataforma e receba comissões em até 4
+              níveis.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-4 gap-6">
+            <Card
+              className="bg-black/50 border-green-900 overflow-hidden animate-float"
+              style={{ animationDelay: "0s" }}
+            >
+              <CardContent className="p-6 text-center">
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-green-500/20 mx-auto mb-4">
+                  <Users className="h-6 w-6 text-green-500" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Nível 1</h3>
+                <p className="text-4xl font-bold text-green-500 mb-4">10%</p>
+                <p className="text-gray-400">
+                  Comissão sobre os ganhos de todos os investidores que você indicar diretamente.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card
+              className="bg-black/50 border-green-900 overflow-hidden animate-float"
+              style={{ animationDelay: "0.2s" }}
+            >
+              <CardContent className="p-6 text-center">
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-green-500/20 mx-auto mb-4">
+                  <Users className="h-6 w-6 text-green-500" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Nível 2</h3>
+                <p className="text-4xl font-bold text-green-500 mb-4">5%</p>
+                <p className="text-gray-400">
+                  Comissão sobre os ganhos dos investidores indicados pelos seus afiliados diretos.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card
+              className="bg-black/50 border-green-900 overflow-hidden animate-float"
+              style={{ animationDelay: "0.4s" }}
+            >
+              <CardContent className="p-6 text-center">
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-green-500/20 mx-auto mb-4">
+                  <Users className="h-6 w-6 text-green-500" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Nível 3</h3>
+                <p className="text-4xl font-bold text-green-500 mb-4">3%</p>
+                <p className="text-gray-400">
+                  Comissão sobre os ganhos dos investidores do terceiro nível da sua rede.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card
+              className="bg-black/50 border-green-900 overflow-hidden animate-float"
+              style={{ animationDelay: "0.6s" }}
+            >
+              <CardContent className="p-6 text-center">
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-green-500/20 mx-auto mb-4">
+                  <Users className="h-6 w-6 text-green-500" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Nível 4</h3>
+                <p className="text-4xl font-bold text-green-500 mb-4">2%</p>
+                <p className="text-gray-400">Comissão sobre os ganhos dos investidores do quarto nível da sua rede.</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="mt-12 bg-black/50 border border-green-900 rounded-lg p-6">
+            <div className="text-center mb-6">
+              <h3 className="text-xl font-bold text-white">Exemplo de Ganhos com Afiliados</h3>
+              <p className="text-gray-400">Veja quanto você pode ganhar com sua rede de afiliados</p>
+            </div>
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className="bg-green-500/10 rounded-lg p-4">
+                <h4 className="text-lg font-bold text-green-500 mb-2">Cenário Básico</h4>
+                <ul className="space-y-2 text-sm">
+                  <li className="text-gray-300">• 5 afiliados diretos (Nível 1)</li>
+                  <li className="text-gray-300">• Cada um investindo $100 USDT</li>
+                  <li className="text-gray-300">• Rendimento diário: $30 USDT</li>
+                  <li className="text-gray-300">• Rendimento mensal: $900 USDT</li>
+                </ul>
+              </div>
+              <div className="bg-green-500/10 rounded-lg p-4">
+                <h4 className="text-lg font-bold text-green-500 mb-2">Cenário Intermediário</h4>
+                <ul className="space-y-2 text-sm">
+                  <li className="text-gray-300">• 10 afiliados diretos (Nível 1)</li>
+                  <li className="text-gray-300">• 20 afiliados no Nível 2</li>
+                  <li className="text-gray-300">• Rendimento diário: $90 USDT</li>
+                  <li className="text-gray-300">• Rendimento mensal: $2.700 USDT</li>
+                </ul>
+              </div>
+              <div className="bg-green-500/10 rounded-lg p-4">
+                <h4 className="text-lg font-bold text-green-500 mb-2">Cenário Avançado</h4>
+                <ul className="space-y-2 text-sm">
+                  <li className="text-gray-300">• Rede completa nos 4 níveis</li>
+                  <li className="text-gray-300">• Mais de 100 afiliados na rede</li>
+                  <li className="text-gray-300">• Rendimento diário: $300+ USDT</li>
+                  <li className="text-gray-300">• Rendimento mensal: $9.000+ USDT</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Global Market Section */}
+      <section className="py-16 bg-gradient-to-b from-green-950 to-black">
+        <div className="container">
+          <div className="relative rounded-xl overflow-hidden">
+            <div className="relative h-[500px] w-full">
+              <Image
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/pares%20de%20moedas%20do%20mercado%20forex%20%281%29.png-2wE2GxaJLaDpMfmK8HmpFKLmDsYXPU.jpeg"
+                alt="Mercado Global Forex"
+                fill
+                className="object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent" />
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 p-8 md:p-12">
+              <div className="max-w-3xl mx-auto text-center">
+                <h2 className="text-3xl md:text-4xl font-bold mb-4 bg-gradient-to-r from-green-500 via-green-400 to-green-600 text-transparent bg-clip-text">
+                  Mercado Global de Forex
+                </h2>
+                <p className="text-xl text-gray-300 mb-6">
+                  Conecte-se ao maior mercado financeiro do mundo, com volume diário de trilhões de dólares e
+                  oportunidades ilimitadas.
+                </p>
+                <Button
+                  size="lg"
+                  className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-bold px-8"
+                  asChild
+                >
+                  <Link href="/cadastro">
+                    Comece a investir agora
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-20 bg-gradient-to-b from-black to-green-950/30">
         <div className="container">
@@ -592,10 +738,12 @@ export default function Home() {
             <Button
               size="lg"
               className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-black font-bold px-8 animate-pulse"
-              onClick={openRegisterModal}
+              asChild
             >
-              Comece a investir agora
-              <ArrowRight className="ml-2 h-5 w-5" />
+              <Link href="/cadastro">
+                Comece a investir agora
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
             </Button>
           </div>
         </div>

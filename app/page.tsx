@@ -1,34 +1,35 @@
+import Navbar from "@/components/navbar"
 import Hero from "@/components/hero"
 import Features from "@/components/features"
-import AffiliateProgram from "@/components/affiliate-program"
-import ReferralCalculator from "@/components/referral-calculator"
-import YieldCalculator from "@/components/yield-calculator"
-import CryptoSection from "@/components/crypto-section"
-import TradingBot from "@/components/trading-bot"
-import CryptoGallery from "@/components/crypto-gallery"
+import HowItWorks from "@/components/how-it-works"
+import Testimonials from "@/components/testimonials"
+import FAQ from "@/components/faq"
 import Footer from "@/components/footer"
-import FloatingElements from "@/components/floating-elements"
-import Navbar from "@/components/navbar"
+import { createClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
 
-export default function Home() {
+export default async function Home() {
+  const supabase = createClient()
+
+  // Verificar se o usuário já está autenticado
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  // Se estiver autenticado, redirecionar para o dashboard
+  if (session) {
+    redirect("/dashboard")
+  }
+
   return (
-    <main className="flex min-h-screen flex-col items-center bg-black text-white overflow-hidden">
-      <FloatingElements />
+    <main className="min-h-screen">
       <Navbar />
-      <div className="pt-16">
-        <Hero />
-
-        <Features />
-        <TradingBot />
-        <CryptoGallery />
-        <AffiliateProgram />
-        <div className="w-full max-w-7xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-8 relative z-10">
-          <ReferralCalculator />
-          <YieldCalculator />
-        </div>
-        <CryptoSection />
-        <Footer />
-      </div>
+      <Hero />
+      <Features />
+      <HowItWorks />
+      <Testimonials />
+      <FAQ />
+      <Footer />
     </main>
   )
 }

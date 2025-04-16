@@ -7,9 +7,8 @@ import { ThemeProvider } from "@/components/theme-provider"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Cash Fund - Rendimentos Diários",
-  description:
-    "Plataforma de investimentos com rendimentos diários fixos de 4% e programa de afiliados em três níveis.",
+  title: "Cash Fund - Investimentos com 4% de rendimento diário",
+  description: "Plataforma de investimentos com rendimento fixo de 4% ao dia e programa de afiliados em 3 níveis.",
     generator: 'v0.dev'
 }
 
@@ -19,9 +18,9 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           {children}
         </ThemeProvider>
       </body>

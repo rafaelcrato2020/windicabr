@@ -1,74 +1,71 @@
-"use client"
-
-import { Percent, TrendingUp, Users, Shield } from "lucide-react"
-import { useEffect, useState } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Bitcoin, Percent, Users, TrendingUp } from "lucide-react"
 
 export default function Features() {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-
-    // Add animation delay to each feature card
-    const cards = document.querySelectorAll(".feature-card")
-    cards.forEach((card, index) => {
-      const element = card as HTMLElement
-      element.style.animationDelay = `${index * 0.2}s`
-    })
-  }, [])
-
-  const features = [
-    {
-      icon: <Percent className="h-10 w-10 text-orange-500" />,
-      title: "4% de Rendimento Diário",
-      description: "Ganhe 4% de rendimento fixo todos os dias sobre seu investimento inicial.",
-      color: "from-orange-500/20 to-orange-500/5",
-    },
-    {
-      icon: <TrendingUp className="h-10 w-10 text-green-500" />,
-      title: "Crescimento Exponencial",
-      description: "Veja seu investimento crescer exponencialmente com nosso programa de rendimentos diários.",
-      color: "from-green-500/20 to-green-500/5",
-    },
-    {
-      icon: <Users className="h-10 w-10 text-purple-500" />,
-      title: "Programa de Afiliados",
-      description: "Ganhe comissões em 3 níveis: 10%, 5% e 3% dos investimentos de seus indicados.",
-      color: "from-purple-500/20 to-purple-500/5",
-    },
-    {
-      icon: <Shield className="h-10 w-10 text-blue-500" />,
-      title: "Investimento Seguro",
-      description: "Operamos com as principais criptomoedas do mercado: Bitcoin, Ethereum e Solana.",
-      color: "from-blue-500/20 to-blue-500/5",
-    },
-  ]
-
   return (
-    <div className="w-full bg-black py-16 relative z-10">
-      <div className="max-w-7xl mx-auto px-4">
-        <h2 className="text-3xl md:text-5xl font-bold text-center mb-4 gradient-text">Por que escolher o Cash Fund?</h2>
-        <p className="text-center text-gray-400 mb-12 max-w-2xl mx-auto">
-          Nossa plataforma futurista oferece as melhores oportunidades de investimento do mercado
-        </p>
+    <section className="py-20 bg-gray-50 dark:bg-gray-900">
+      <div className="container">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl font-bold mb-4">Por que escolher o Cash Fund?</h2>
+          <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
+            Nossa plataforma oferece rendimentos diários fixos e um programa de afiliados lucrativo
+          </p>
+        </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {features.map((feature, index) => (
-            <div
-              key={index}
-              className={`feature-card flex flex-col items-center text-center p-6 rounded-xl futuristic-card hover-float opacity-0 animate-[fadeIn_0.5s_ease-in-out_forwards]`}
-            >
-              <div
-                className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 bg-gradient-to-br ${feature.color}`}
-              >
-                {feature.icon}
-              </div>
-              <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
-              <p className="text-gray-400">{feature.description}</p>
-            </div>
-          ))}
+          <Card className="card-hover">
+            <CardHeader>
+              <Percent className="h-10 w-10 text-green-500 mb-2" />
+              <CardTitle>Rendimento Fixo</CardTitle>
+              <CardDescription>4% de rendimento diário garantido sobre seus investimentos</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600 dark:text-gray-400">
+                Nosso sistema de trading automatizado garante rendimentos consistentes todos os dias.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="card-hover">
+            <CardHeader>
+              <Bitcoin className="h-10 w-10 text-blue-500 mb-2" />
+              <CardTitle>Criptomoedas</CardTitle>
+              <CardDescription>Investimentos em Bitcoin, Ethereum e Solana</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600 dark:text-gray-400">
+                Aproveite o potencial das principais criptomoedas do mercado com segurança.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="card-hover">
+            <CardHeader>
+              <Users className="h-10 w-10 text-purple-500 mb-2" />
+              <CardTitle>Programa de Afiliados</CardTitle>
+              <CardDescription>Ganhe comissões em 3 níveis de indicação</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600 dark:text-gray-400">
+                10% no primeiro nível, 5% no segundo nível e 3% no terceiro nível.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="card-hover">
+            <CardHeader>
+              <TrendingUp className="h-10 w-10 text-orange-500 mb-2" />
+              <CardTitle>Saques Rápidos</CardTitle>
+              <CardDescription>Retire seus rendimentos a qualquer momento</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600 dark:text-gray-400">
+                Processamento de saques em até 24 horas diretamente para sua carteira.
+              </p>
+            </CardContent>
+          </Card>
         </div>
       </div>
-    </div>
+    </section>
   )
 }
